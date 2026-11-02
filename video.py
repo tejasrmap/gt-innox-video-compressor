@@ -41,20 +41,32 @@ if sys.stderr and hasattr(sys.stderr, "reconfigure"):
     except Exception:
         pass
 
-# Try importing ttkbootstrap for a modern UI; fallback to tkinter/ttk if unavailable
+# Safely import GUI libraries (ttkbootstrap/tkinter); safe fallback on headless/Vercel
+HAS_GUI = False
+HAS_TTKBOOTSTRAP = False
+tb = None
+tk = None
+filedialog = None
+Messagebox = None
+
 try:
     import ttkbootstrap as tb
     from ttkbootstrap.constants import *
     from ttkbootstrap.dialogs import Messagebox
+    import tkinter as tk
+    from tkinter import filedialog
     HAS_TTKBOOTSTRAP = True
-except ImportError:
-    import tkinter as tb
-    from tkinter import ttk
-    from tkinter import messagebox as Messagebox
-    HAS_TTKBOOTSTRAP = False
-
-import tkinter as tk
-from tkinter import filedialog
+    HAS_GUI = True
+except Exception:
+    try:
+        import tkinter as tk
+        from tkinter import ttk
+        from tkinter import messagebox as Messagebox
+        from tkinter import filedialog
+        tb = tk
+        HAS_GUI = True
+    except Exception:
+        HAS_GUI = False
 
 
 # =====================================================================
@@ -517,6 +529,8 @@ class VideoCompressorGUI:
     }
 
     def __init__(self):
+        if not HAS_GUI:
+            raise RuntimeError("GUI is not supported in this headless/serverless environment.")
         # Create main window
         if HAS_TTKBOOTSTRAP:
             self.root = tb.Window(title="GT INNOX Video Compressor", themename="darkly")

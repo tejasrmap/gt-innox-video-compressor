@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>GT INNOX Video Compressor Studio</title>
   
   <!-- Favicon: GT INNOX Monogram -->
@@ -592,6 +592,157 @@
     .footer-links a:hover {
       text-decoration: underline;
     }
+
+    /* Mobile Responsive Optimizations */
+    @media (max-width: 768px) {
+      body {
+        padding: 0;
+      }
+      .top-navbar {
+        padding: 8px 14px;
+      }
+      .nav-logo-svg {
+        height: 28px;
+      }
+      .nav-links {
+        gap: 6px;
+      }
+      .nav-pill-btn {
+        padding: 6px 10px;
+        font-size: 11px;
+      }
+      .container {
+        padding: 14px 10px 32px;
+      }
+      header {
+        margin-bottom: 18px;
+      }
+      .gt-badge-pill {
+        font-size: 10px;
+        padding: 4px 10px;
+        margin-bottom: 8px;
+      }
+      h1 {
+        font-size: 24px;
+        letter-spacing: -0.5px;
+        margin-bottom: 6px;
+      }
+      .subtitle {
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      .glass-card {
+        padding: 16px 12px;
+        border-radius: 14px;
+        margin-bottom: 14px;
+      }
+      .dropzone {
+        padding: 32px 12px;
+      }
+      .dropzone-icon {
+        width: 48px;
+        height: 48px;
+        margin-bottom: 10px;
+      }
+      .dropzone h3 {
+        font-size: 16px;
+      }
+      .dropzone p {
+        font-size: 12px;
+      }
+      .video-info-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .info-pill {
+        padding: 8px;
+      }
+      .info-pill-label {
+        font-size: 10px;
+      }
+      .info-pill-val {
+        font-size: 13px;
+      }
+      /* Native-like horizontal touch chips on mobile */
+      .presets-row {
+        display: flex;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        gap: 8px;
+        padding-bottom: 6px;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        margin: 12px 0 16px;
+      }
+      .presets-row::-webkit-scrollbar {
+        display: none;
+      }
+      .preset-card {
+        flex: 0 0 142px;
+        scroll-snap-align: start;
+        padding: 10px;
+      }
+      .preset-title {
+        font-size: 12px;
+      }
+      .preset-desc {
+        font-size: 11px;
+      }
+      .tab-group {
+        margin-bottom: 14px;
+      }
+      .tab-btn {
+        padding: 8px;
+        font-size: 12px;
+      }
+      .control-label {
+        font-size: 13px;
+      }
+      .control-badge {
+        font-size: 12px;
+        padding: 2px 8px;
+      }
+      .grid-4 {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      select {
+        padding: 8px 6px;
+        font-size: 12px;
+      }
+      .btn {
+        padding: 12px 16px;
+        font-size: 14px;
+      }
+      .comparison-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+      .results-hero .savings-badge {
+        font-size: 14px;
+        padding: 6px 14px;
+      }
+      .results-action-row {
+        flex-direction: column !important;
+        gap: 8px !important;
+      }
+      .results-action-row .btn {
+        width: 100% !important;
+      }
+      footer {
+        padding: 20px 12px;
+      }
+    }
+
+    @media (max-width: 440px) {
+      .nav-pill-btn span {
+        display: none;
+      }
+      .grid-4 {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -629,14 +780,14 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 2L2 22h20L12 2z"/>
         </svg>
-        Deploy on Vercel
+        <span>Deploy</span>
       </a>
       
       <a href="https://github.com/tejasrmap/gt-innox-video-compressor" target="_blank" class="nav-pill-btn btn-github">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
         </svg>
-        GitHub
+        <span>GitHub</span>
       </a>
     </div>
   </nav>
@@ -843,7 +994,7 @@
         </div>
       </div>
 
-      <div style="display: flex; gap: 12px;">
+      <div class="results-action-row" style="display: flex; gap: 12px;">
         <a id="downloadBtn" class="btn btn-primary" style="flex: 2;" href="#" download>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -955,6 +1106,10 @@
       const videoUrl = URL.createObjectURL(file);
       const tempVideo = document.createElement('video');
       tempVideo.preload = 'metadata';
+      tempVideo.muted = true;
+      tempVideo.playsInline = true;
+      tempVideo.setAttribute('playsinline', '');
+      tempVideo.setAttribute('webkit-playsinline', '');
       tempVideo.src = videoUrl;
 
       // Timeout safety so user is never stuck
@@ -1171,6 +1326,8 @@
       video.src = URL.createObjectURL(rawSelectedFile);
       video.muted = true;
       video.playsInline = true;
+      video.setAttribute('playsinline', '');
+      video.setAttribute('webkit-playsinline', '');
 
       await new Promise((res) => {
         video.onloadeddata = res;

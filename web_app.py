@@ -285,7 +285,6 @@ INDEX_HTML = """<!DOCTYPE html>
       --bg-dark: #07090e;
       --card-bg: rgba(15, 23, 42, 0.72);
       --card-border: rgba(255, 255, 255, 0.08);
-      --card-border-glow: rgba(0, 245, 255, 0.35);
       --gt-cyan: #00f5ff;
       --gt-indigo: #6366f1;
       --gt-pink: #ec4899;
@@ -319,7 +318,6 @@ INDEX_HTML = """<!DOCTYPE html>
       align-items: center;
     }
 
-    /* Top Navigation Bar */
     .top-navbar {
       width: 100%;
       border-bottom: 1px solid var(--card-border);
@@ -394,7 +392,6 @@ INDEX_HTML = """<!DOCTYPE html>
       padding: 36px 20px 48px;
     }
 
-    /* Hero Header */
     header {
       text-align: center;
       margin-bottom: 32px;
@@ -435,7 +432,6 @@ INDEX_HTML = """<!DOCTYPE html>
       line-height: 1.5;
     }
 
-    /* Glass Cards */
     .glass-card {
       background: var(--card-bg);
       backdrop-filter: blur(20px);
@@ -445,7 +441,6 @@ INDEX_HTML = """<!DOCTYPE html>
       padding: 30px;
       box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
       margin-bottom: 24px;
-      transition: all 0.3s ease;
       position: relative;
       overflow: hidden;
     }
@@ -461,7 +456,6 @@ INDEX_HTML = """<!DOCTYPE html>
       opacity: 0.7;
     }
 
-    /* Dropzone */
     .dropzone {
       border: 2px dashed rgba(255, 255, 255, 0.15);
       border-radius: var(--radius-lg);
@@ -507,7 +501,6 @@ INDEX_HTML = """<!DOCTYPE html>
       display: none;
     }
 
-    /* Video Details Card */
     .video-info-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -539,7 +532,6 @@ INDEX_HTML = """<!DOCTYPE html>
       font-family: 'JetBrains Mono', monospace;
     }
 
-    /* Presets Row */
     .presets-row {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -582,7 +574,6 @@ INDEX_HTML = """<!DOCTYPE html>
       color: var(--text-muted);
     }
 
-    /* Tabs */
     .tab-group {
       display: flex;
       background: rgba(0, 0, 0, 0.4);
@@ -612,7 +603,6 @@ INDEX_HTML = """<!DOCTYPE html>
       box-shadow: 0 2px 8px rgba(0,0,0,0.25);
     }
 
-    /* Sliders and Inputs */
     .control-group {
       margin-bottom: 20px;
     }
@@ -690,7 +680,6 @@ INDEX_HTML = """<!DOCTYPE html>
       border-color: var(--gt-cyan);
     }
 
-    /* Buttons */
     .btn {
       display: inline-flex;
       align-items: center;
@@ -738,7 +727,6 @@ INDEX_HTML = """<!DOCTYPE html>
       background: rgba(255, 255, 255, 0.1);
     }
 
-    /* Progress Section */
     .progress-track {
       width: 100%;
       height: 12px;
@@ -766,7 +754,6 @@ INDEX_HTML = """<!DOCTYPE html>
       font-family: 'JetBrains Mono', monospace;
     }
 
-    /* Results */
     .results-hero {
       text-align: center;
       padding: 10px 0 20px;
@@ -836,7 +823,6 @@ INDEX_HTML = """<!DOCTYPE html>
       100% { transform: rotate(360deg); }
     }
 
-    /* Footer */
     footer {
       width: 100%;
       border-top: 1px solid var(--card-border);
@@ -881,7 +867,6 @@ INDEX_HTML = """<!DOCTYPE html>
   <!-- Top Navbar -->
   <nav class="top-navbar">
     <a href="/" class="nav-brand">
-      <!-- GT INNOX Vector Logo -->
       <svg class="nav-logo-svg" viewBox="0 0 520 120" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="navGtGrad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -908,7 +893,6 @@ INDEX_HTML = """<!DOCTYPE html>
     </a>
 
     <div class="nav-links">
-      <!-- Vercel Deploy Badge -->
       <a href="https://vercel.com/new" target="_blank" class="nav-pill-btn btn-vercel">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 2L2 22h20L12 2z"/>
@@ -916,8 +900,7 @@ INDEX_HTML = """<!DOCTYPE html>
         Deploy on Vercel
       </a>
       
-      <!-- GitHub Button -->
-      <a href="https://github.com" target="_blank" class="nav-pill-btn btn-github">
+      <a href="https://github.com/tejasrmap/gt-innox-video-compressor" target="_blank" class="nav-pill-btn btn-github">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
         </svg>
@@ -927,7 +910,6 @@ INDEX_HTML = """<!DOCTYPE html>
   </nav>
 
   <div class="container">
-    <!-- Header -->
     <header>
       <div class="gt-badge-pill">
         <span>⚡ GT INNOX Next-Gen Media Lab</span>
@@ -1104,7 +1086,6 @@ INDEX_HTML = """<!DOCTYPE html>
         <p style="color: var(--text-muted); font-size: 14px;">Optimized and packaged by GT INNOX.</p>
       </div>
 
-      <!-- Video Comparison Players -->
       <div class="comparison-grid">
         <div class="video-card">
           <div class="video-card-header">
@@ -1149,19 +1130,19 @@ INDEX_HTML = """<!DOCTYPE html>
     </div>
     <p>Open Source Software under MIT License. Production-ready for GitHub & Vercel.</p>
     <div class="footer-links">
-      <a href="https://github.com" target="_blank">GitHub Repository</a>
+      <a href="https://github.com/tejasrmap/gt-innox-video-compressor" target="_blank">GitHub Repository</a>
       <span>•</span>
       <a href="https://vercel.com" target="_blank">Deploy on Vercel</a>
-      <span>•</span>
-      <a href="#">GT INNOX Community</a>
     </div>
   </footer>
 
   <script>
     let currentTaskId = null;
     let originalFileInfo = null;
+    let rawSelectedFile = null;
     let eventSource = null;
     let currentMode = 'crf';
+    let isClientSideProcessing = false;
 
     const dropzone = document.getElementById('dropzone');
     const fileInput = document.getElementById('fileInput');
@@ -1217,37 +1198,85 @@ INDEX_HTML = """<!DOCTYPE html>
       }
     });
 
-    async function handleUpload(file) {
-      const formData = new FormData();
-      formData.append('file', file);
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
 
-      dropzone.innerHTML = `<div class="spinner" style="margin-bottom: 12px;"></div><h3>Uploading & Analyzing ${file.name}...</h3>`;
+    function handleUpload(file) {
+      if (!file) return;
+      rawSelectedFile = file;
+      dropzone.innerHTML = `<div class="spinner" style="margin-bottom: 12px;"></div><h3>Analyzing ${file.name}...</h3>`;
 
-      try {
-        const resp = await fetch('/api/upload', { method: 'POST', body: formData });
-        if (!resp.ok) throw new Error('Upload failed');
-        const data = await resp.json();
+      // Instant client-side metadata analysis (Zero network upload delay)
+      const videoUrl = URL.createObjectURL(file);
+      const tempVideo = document.createElement('video');
+      tempVideo.preload = 'metadata';
+      tempVideo.src = videoUrl;
 
-        currentTaskId = data.task_id;
-        originalFileInfo = data;
+      // Timeout safety so user is never stuck
+      const timeoutFallback = setTimeout(() => {
+        applyMetadata({
+          duration: 30,
+          w: 1920,
+          h: 1080
+        });
+      }, 1200);
 
-        document.getElementById('videoTitle').textContent = data.filename;
-        document.getElementById('infoSize').textContent = data.size_formatted;
-        document.getElementById('infoDuration').textContent = data.duration_formatted;
-        document.getElementById('infoRes').textContent = data.resolution;
-        document.getElementById('infoFps').textContent = data.fps + ' fps';
+      tempVideo.onloadedmetadata = () => {
+        clearTimeout(timeoutFallback);
+        applyMetadata({
+          duration: tempVideo.duration || 1,
+          w: tempVideo.videoWidth || 1920,
+          h: tempVideo.videoHeight || 1080
+        });
+      };
 
-        const mbSize = data.size_bytes / (1024 * 1024);
-        targetSlider.max = Math.max(50, Math.ceil(mbSize * 1.2));
-        targetSlider.value = Math.min(25, Math.max(5, (mbSize * 0.4).toFixed(1)));
-        targetValBadge.textContent = targetSlider.value + ' MB';
+      tempVideo.onerror = () => {
+        clearTimeout(timeoutFallback);
+        applyMetadata({
+          duration: 10,
+          w: 1280,
+          h: 720
+        });
+      };
 
-        uploadSection.classList.add('hidden');
-        configSection.classList.remove('hidden');
-      } catch (err) {
-        alert('Upload failed: ' + err.message);
-        location.reload();
+      function applyMetadata(meta) {
+        const mins = Math.floor(meta.duration / 60);
+        const secs = Math.floor(meta.duration % 60);
+        const durationFormatted = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+
+        originalFileInfo = {
+          filename: file.name,
+          size_bytes: file.size,
+          size_formatted: formatBytes(file.size),
+          duration: meta.duration,
+          duration_formatted: durationFormatted,
+          resolution: `${meta.w}x${meta.h}`,
+          fps: '30.0',
+          client_url: videoUrl
+        };
+        populateInfo(originalFileInfo);
       }
+    }
+
+    function populateInfo(data) {
+      document.getElementById('videoTitle').textContent = data.filename;
+      document.getElementById('infoSize').textContent = data.size_formatted;
+      document.getElementById('infoDuration').textContent = data.duration_formatted;
+      document.getElementById('infoRes').textContent = data.resolution;
+      document.getElementById('infoFps').textContent = data.fps ? data.fps + ' fps' : '30 fps';
+
+      const mbSize = data.size_bytes / (1024 * 1024);
+      targetSlider.max = Math.max(50, Math.ceil(mbSize * 1.2));
+      targetSlider.value = Math.min(25, Math.max(5, (mbSize * 0.4).toFixed(1)));
+      targetValBadge.textContent = targetSlider.value + ' MB';
+
+      uploadSection.classList.add('hidden');
+      configSection.classList.remove('hidden');
     }
 
     tabCrf.addEventListener('click', () => {
@@ -1327,22 +1356,39 @@ INDEX_HTML = """<!DOCTYPE html>
     });
 
     startCompressBtn.addEventListener('click', async () => {
-      if (!currentTaskId) return;
-
-      const formData = new FormData();
-      formData.append('task_id', currentTaskId);
-      formData.append('mode', currentMode);
-      formData.append('crf', crfSlider.value);
-      formData.append('target_mb', targetSlider.value);
-      formData.append('scale', scaleSelect.value);
-      formData.append('codec', codecSelect.value);
-      formData.append('audio', audioSelect.value);
-
       configSection.classList.add('hidden');
       progressSection.classList.remove('hidden');
 
-      await fetch('/api/compress', { method: 'POST', body: formData });
-      listenToProgress();
+      const isLocalServer = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') && !location.hostname.includes('vercel');
+
+      if (isLocalServer) {
+        try {
+          const uploadForm = new FormData();
+          uploadForm.append('file', rawSelectedFile);
+          const uploadResp = await fetch('/api/upload', { method: 'POST', body: uploadForm });
+          if (!uploadResp.ok) throw new Error('Local upload failed');
+          const data = await uploadResp.json();
+          currentTaskId = data.task_id;
+
+          const formData = new FormData();
+          formData.append('task_id', currentTaskId);
+          formData.append('mode', currentMode);
+          formData.append('crf', crfSlider.value);
+          formData.append('target_mb', targetSlider.value);
+          formData.append('scale', scaleSelect.value);
+          formData.append('codec', codecSelect.value);
+          formData.append('audio', audioSelect.value);
+
+          await fetch('/api/compress', { method: 'POST', body: formData });
+          listenToProgress();
+          return;
+        } catch (e) {
+          console.warn('Local engine unavailable, switching to browser engine:', e);
+        }
+      }
+
+      // In-Browser High-Speed Engine (Optimized for Vercel & Cloud)
+      runBrowserCompression();
     });
 
     function listenToProgress() {
@@ -1368,7 +1414,7 @@ INDEX_HTML = """<!DOCTYPE html>
 
         if (data.status === 'completed') {
           eventSource.close();
-          showResults(data.result);
+          showBackendResults(data.result);
         } else if (data.status === 'failed' || data.status === 'cancelled') {
           eventSource.close();
           alert(data.error || 'Compression halted.');
@@ -1376,19 +1422,144 @@ INDEX_HTML = """<!DOCTYPE html>
         }
       };
 
-      eventSource.onerror = () => {
-        eventSource.close();
+      eventSource.onerror = () => eventSource.close();
+    }
+
+    // High-Performance In-Browser Compression Engine (Zero Server Upload Delay)
+    async function runBrowserCompression() {
+      const video = document.createElement('video');
+      video.src = URL.createObjectURL(rawSelectedFile);
+      video.muted = true;
+      video.playsInline = true;
+
+      await new Promise((res) => {
+        video.onloadeddata = res;
+        video.load();
+      });
+
+      let targetW = video.videoWidth || 1280;
+      let targetH = video.videoHeight || 720;
+      const scale = scaleSelect.value;
+      if (scale === '1080p' && targetH > 1080) {
+        targetW = Math.round((video.videoWidth * 1080) / video.videoHeight);
+        targetH = 1080;
+      } else if (scale === '720p' && targetH > 720) {
+        targetW = Math.round((video.videoWidth * 720) / video.videoHeight);
+        targetH = 720;
+      } else if (scale === '480p' && targetH > 480) {
+        targetW = Math.round((video.videoWidth * 480) / video.videoHeight);
+        targetH = 480;
+      } else if (scale === '360p' && targetH > 360) {
+        targetW = Math.round((video.videoWidth * 360) / video.videoHeight);
+        targetH = 360;
+      } else if (scale === '50%') {
+        targetW = Math.round(targetW * 0.5);
+        targetH = Math.round(targetH * 0.5);
+      }
+
+      // Ensure dimensions are even
+      targetW = Math.floor(targetW / 2) * 2;
+      targetH = Math.floor(targetH / 2) * 2;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext('2d');
+
+      const stream = canvas.captureStream(30);
+
+      // Bitrate calculation
+      const dur = video.duration || 10;
+      let bitrate = 1500000;
+      if (currentMode === 'target_size') {
+        bitrate = Math.max(120000, Math.floor((parseFloat(targetSlider.value) * 1024 * 1024 * 8) / dur));
+      } else {
+        const crf = parseInt(crfSlider.value);
+        bitrate = Math.max(250000, Math.floor(5000000 * Math.pow(0.86, crf - 18)));
+      }
+
+      let mime = 'video/webm;codecs=vp9';
+      let ext = 'webm';
+      if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')) {
+        mime = 'video/mp4;codecs=avc1';
+        ext = 'mp4';
+      } else if (!MediaRecorder.isTypeSupported(mime)) {
+        mime = 'video/webm';
+        ext = 'webm';
+      }
+
+      let recorder;
+      try {
+        recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate });
+      } catch (e) {
+        recorder = new MediaRecorder(stream, { videoBitsPerSecond: bitrate });
+      }
+
+      const chunks = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
       };
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: mime });
+        const compUrl = URL.createObjectURL(blob);
+        const compBytes = blob.size;
+        const origBytes = rawSelectedFile.size;
+        const savedBytes = Math.max(0, origBytes - compBytes);
+        const savedPct = ((savedBytes / origBytes) * 100).toFixed(1);
+
+        progressSection.classList.add('hidden');
+        resultsSection.classList.remove('hidden');
+
+        savingsBadge.textContent = `🎉 Reduced by ${savedPct}% (${formatBytes(savedBytes)} Saved)`;
+        compOrigSize.textContent = formatBytes(origBytes);
+        compNewSize.textContent = formatBytes(compBytes);
+
+        playerOriginal.src = URL.createObjectURL(rawSelectedFile);
+        playerCompressed.src = compUrl;
+
+        downloadBtn.href = compUrl;
+        downloadBtn.download = `${rawSelectedFile.name.replace(/\.[^/.]+$/, '')}_GT_INNOX_compressed.${ext}`;
+      };
+
+      recorder.start(500);
+
+      const startTime = Date.now();
+      video.playbackRate = 1.5; // Fast processing in browser
+      await video.play();
+
+      function renderFrame() {
+        if (video.ended || video.paused) {
+          if (recorder.state === 'recording') recorder.stop();
+          return;
+        }
+        ctx.drawImage(video, 0, 0, targetW, targetH);
+        const cur = video.currentTime;
+        const pct = Math.min(99, (cur / dur) * 100).toFixed(1);
+        progressFill.style.width = pct + '%';
+        progressPct.textContent = pct + '%';
+
+        const elapsed = (Date.now() - startTime) / 1000;
+        const speed = cur / (elapsed || 0.1);
+        progressSpeed.textContent = `Speed: ${speed.toFixed(2)}x`;
+        const eta = Math.max(0, (dur - cur) / (speed || 1));
+        const m = Math.floor(eta / 60);
+        const s = Math.floor(eta % 60);
+        progressEta.textContent = `ETA: ${m}:${s < 10 ? '0' : ''}${s}`;
+
+        requestAnimationFrame(renderFrame);
+      }
+      renderFrame();
     }
 
     cancelBtn.addEventListener('click', async () => {
       if (currentTaskId) {
         await fetch(`/api/cancel/${currentTaskId}`, { method: 'POST' });
-        location.reload();
       }
+      location.reload();
     });
 
-    function showResults(result) {
+    function showBackendResults(result) {
       progressSection.classList.add('hidden');
       resultsSection.classList.remove('hidden');
 
@@ -1400,6 +1571,7 @@ INDEX_HTML = """<!DOCTYPE html>
       playerCompressed.src = `/api/stream/${currentTaskId}/compressed`;
 
       downloadBtn.href = `/api/download/${currentTaskId}`;
+      downloadBtn.download = `${originalFileInfo.filename.replace(/\.[^/.]+$/, '')}_GT_INNOX_compressed.mp4`;
     }
 
     restartBtn.addEventListener('click', () => location.reload());
@@ -1407,6 +1579,7 @@ INDEX_HTML = """<!DOCTYPE html>
   </script>
 </body>
 </html>
+
 """
 
 @app.get("/", response_class=HTMLResponse)

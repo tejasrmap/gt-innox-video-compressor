@@ -938,47 +938,60 @@
       return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
-    async function handleUpload(file) {
+    function handleUpload(file) {
+      if (!file) return;
       rawSelectedFile = file;
       dropzone.innerHTML = `<div class="spinner" style="margin-bottom: 12px;"></div><h3>Analyzing ${file.name}...</h3>`;
 
-      // Try server upload first; fallback to client-side video analysis if on Vercel/serverless
-      const formData = new FormData();
-      formData.append('file', file);
+      // Instant client-side metadata analysis (Zero network upload delay)
+      const videoUrl = URL.createObjectURL(file);
+      const tempVideo = document.createElement('video');
+      tempVideo.preload = 'metadata';
+      tempVideo.src = videoUrl;
 
-      try {
-        const resp = await fetch('/api/upload', { method: 'POST', body: formData });
-        if (!resp.ok) throw new Error('Server upload unavailable');
-        const data = await resp.json();
-        currentTaskId = data.task_id;
-        originalFileInfo = data;
-        populateInfo(data);
-      } catch (err) {
-        // Client-side fallback analysis (e.g. on Vercel)
-        isClientSideProcessing = true;
-        const videoUrl = URL.createObjectURL(file);
-        const tempVideo = document.createElement('video');
-        tempVideo.preload = 'metadata';
-        tempVideo.src = videoUrl;
+      // Timeout safety so user is never stuck
+      const timeoutFallback = setTimeout(() => {
+        applyMetadata({
+          duration: 30,
+          w: 1920,
+          h: 1080
+        });
+      }, 1200);
 
-        tempVideo.onloadedmetadata = () => {
-          const duration = tempVideo.duration;
-          const mins = Math.floor(duration / 60);
-          const secs = Math.floor(duration % 60);
-          const durationFormatted = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+      tempVideo.onloadedmetadata = () => {
+        clearTimeout(timeoutFallback);
+        applyMetadata({
+          duration: tempVideo.duration || 1,
+          w: tempVideo.videoWidth || 1920,
+          h: tempVideo.videoHeight || 1080
+        });
+      };
 
-          originalFileInfo = {
-            filename: file.name,
-            size_bytes: file.size,
-            size_formatted: formatBytes(file.size),
-            duration: duration,
-            duration_formatted: durationFormatted,
-            resolution: `${tempVideo.videoWidth}x${tempVideo.videoHeight}`,
-            fps: '30.0',
-            client_url: videoUrl
-          };
-          populateInfo(originalFileInfo);
+      tempVideo.onerror = () => {
+        clearTimeout(timeoutFallback);
+        applyMetadata({
+          duration: 10,
+          w: 1280,
+          h: 720
+        });
+      };
+
+      function applyMetadata(meta) {
+        const mins = Math.floor(meta.duration / 60);
+        const secs = Math.floor(meta.duration % 60);
+        const durationFormatted = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+
+        originalFileInfo = {
+          filename: file.name,
+          size_bytes: file.size,
+          size_formatted: formatBytes(file.size),
+          duration: meta.duration,
+          duration_formatted: durationFormatted,
+          resolution: `${meta.w}x${meta.h}`,
+          fps: '30.0',
+          client_url: videoUrl
         };
+        populateInfo(originalFileInfo);
       }
     }
 
@@ -1078,23 +1091,36 @@
       configSection.classList.add('hidden');
       progressSection.classList.remove('hidden');
 
-      if (!isClientSideProcessing && currentTaskId) {
-        // Backend execution
-        const formData = new FormData();
-        formData.append('task_id', currentTaskId);
-        formData.append('mode', currentMode);
-        formData.append('crf', crfSlider.value);
-        formData.append('target_mb', targetSlider.value);
-        formData.append('scale', scaleSelect.value);
-        formData.append('codec', codecSelect.value);
-        formData.append('audio', audioSelect.value);
+      const isLocalServer = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') && !location.hostname.includes('vercel');
 
-        await fetch('/api/compress', { method: 'POST', body: formData });
-        listenToProgress();
-      } else {
-        // In-Browser Client-Side Compression (MediaRecorder / Canvas)
-        runBrowserCompression();
+      if (isLocalServer) {
+        try {
+          const uploadForm = new FormData();
+          uploadForm.append('file', rawSelectedFile);
+          const uploadResp = await fetch('/api/upload', { method: 'POST', body: uploadForm });
+          if (!uploadResp.ok) throw new Error('Local upload failed');
+          const data = await uploadResp.json();
+          currentTaskId = data.task_id;
+
+          const formData = new FormData();
+          formData.append('task_id', currentTaskId);
+          formData.append('mode', currentMode);
+          formData.append('crf', crfSlider.value);
+          formData.append('target_mb', targetSlider.value);
+          formData.append('scale', scaleSelect.value);
+          formData.append('codec', codecSelect.value);
+          formData.append('audio', audioSelect.value);
+
+          await fetch('/api/compress', { method: 'POST', body: formData });
+          listenToProgress();
+          return;
+        } catch (e) {
+          console.warn('Local engine unavailable, switching to browser engine:', e);
+        }
       }
+
+      // In-Browser High-Speed Engine (Optimized for Vercel & Cloud)
+      runBrowserCompression();
     });
 
     function listenToProgress() {
@@ -1131,26 +1157,41 @@
       eventSource.onerror = () => eventSource.close();
     }
 
-    // In-Browser Client-Side Engine for Vercel
+    // High-Performance In-Browser Compression Engine (Zero Server Upload Delay)
     async function runBrowserCompression() {
       const video = document.createElement('video');
       video.src = URL.createObjectURL(rawSelectedFile);
       video.muted = true;
-      await video.play();
+      video.playsInline = true;
 
-      let targetW = video.videoWidth;
-      let targetH = video.videoHeight;
+      await new Promise((res) => {
+        video.onloadeddata = res;
+        video.load();
+      });
+
+      let targetW = video.videoWidth || 1280;
+      let targetH = video.videoHeight || 720;
       const scale = scaleSelect.value;
-      if (scale === '720p' && targetH > 720) {
+      if (scale === '1080p' && targetH > 1080) {
+        targetW = Math.round((video.videoWidth * 1080) / video.videoHeight);
+        targetH = 1080;
+      } else if (scale === '720p' && targetH > 720) {
         targetW = Math.round((video.videoWidth * 720) / video.videoHeight);
         targetH = 720;
       } else if (scale === '480p' && targetH > 480) {
         targetW = Math.round((video.videoWidth * 480) / video.videoHeight);
         targetH = 480;
+      } else if (scale === '360p' && targetH > 360) {
+        targetW = Math.round((video.videoWidth * 360) / video.videoHeight);
+        targetH = 360;
       } else if (scale === '50%') {
         targetW = Math.round(targetW * 0.5);
         targetH = Math.round(targetH * 0.5);
       }
+
+      // Ensure dimensions are even
+      targetW = Math.floor(targetW / 2) * 2;
+      targetH = Math.floor(targetH / 2) * 2;
 
       const canvas = document.createElement('canvas');
       canvas.width = targetW;
@@ -1158,21 +1199,38 @@
       const ctx = canvas.getContext('2d');
 
       const stream = canvas.captureStream(30);
+
+      // Bitrate calculation
+      const dur = video.duration || 10;
       let bitrate = 1500000;
       if (currentMode === 'target_size') {
-        const dur = video.duration || 10;
-        bitrate = Math.max(100000, Math.floor((parseFloat(targetSlider.value) * 1024 * 1024 * 8) / dur));
+        bitrate = Math.max(120000, Math.floor((parseFloat(targetSlider.value) * 1024 * 1024 * 8) / dur));
       } else {
         const crf = parseInt(crfSlider.value);
-        bitrate = Math.max(300000, Math.floor(4000000 * Math.pow(0.88, crf - 18)));
+        bitrate = Math.max(250000, Math.floor(5000000 * Math.pow(0.86, crf - 18)));
       }
 
       let mime = 'video/webm;codecs=vp9';
-      if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
+      let ext = 'webm';
+      if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')) {
+        mime = 'video/mp4;codecs=avc1';
+        ext = 'mp4';
+      } else if (!MediaRecorder.isTypeSupported(mime)) {
+        mime = 'video/webm';
+        ext = 'webm';
+      }
 
-      const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate });
+      let recorder;
+      try {
+        recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate });
+      } catch (e) {
+        recorder = new MediaRecorder(stream, { videoBitsPerSecond: bitrate });
+      }
+
       const chunks = [];
-      recorder.ondataavailable = (e) => chunks.push(e.data);
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
 
       recorder.onstop = () => {
         const blob = new Blob(chunks, { type: mime });
@@ -1193,24 +1251,34 @@
         playerCompressed.src = compUrl;
 
         downloadBtn.href = compUrl;
-        downloadBtn.download = `${rawSelectedFile.name.replace(/\.[^/.]+$/, '')}_GT_INNOX_compressed.webm`;
+        downloadBtn.download = `${rawSelectedFile.name.replace(/\.[^/.]+$/, '')}_GT_INNOX_compressed.${ext}`;
       };
 
-      recorder.start();
+      recorder.start(500);
 
       const startTime = Date.now();
-      const duration = video.duration || 1;
+      video.playbackRate = 1.5; // Fast processing in browser
+      await video.play();
 
       function renderFrame() {
         if (video.ended || video.paused) {
-          recorder.stop();
+          if (recorder.state === 'recording') recorder.stop();
           return;
         }
         ctx.drawImage(video, 0, 0, targetW, targetH);
         const cur = video.currentTime;
-        const pct = Math.min(99, (cur / duration) * 100).toFixed(1);
+        const pct = Math.min(99, (cur / dur) * 100).toFixed(1);
         progressFill.style.width = pct + '%';
         progressPct.textContent = pct + '%';
+
+        const elapsed = (Date.now() - startTime) / 1000;
+        const speed = cur / (elapsed || 0.1);
+        progressSpeed.textContent = `Speed: ${speed.toFixed(2)}x`;
+        const eta = Math.max(0, (dur - cur) / (speed || 1));
+        const m = Math.floor(eta / 60);
+        const s = Math.floor(eta % 60);
+        progressEta.textContent = `ETA: ${m}:${s < 10 ? '0' : ''}${s}`;
+
         requestAnimationFrame(renderFrame);
       }
       renderFrame();
@@ -1243,3 +1311,4 @@
   </script>
 </body>
 </html>
+

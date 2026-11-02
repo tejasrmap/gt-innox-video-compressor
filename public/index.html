@@ -388,9 +388,9 @@
       transform: scale(1.2);
     }
 
-    .grid-3 {
+    .grid-4 {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
       gap: 16px;
       margin-bottom: 16px;
     }
@@ -747,14 +747,14 @@
       </div>
 
       <!-- Advanced Settings Grid -->
-      <div class="grid-3">
+      <div class="grid-4">
         <div>
           <label class="control-label" style="display:block; margin-bottom: 6px;">Resolution</label>
           <select id="scaleSelect">
             <option value="Original">Keep Original</option>
             <option value="1080p">1080p (Full HD)</option>
-            <option value="720p">720p (HD)</option>
-            <option value="480p">480p (SD)</option>
+            <option value="720p">720p (HD - Fast)</option>
+            <option value="480p">480p (SD - Fastest)</option>
             <option value="360p">360p (Mobile)</option>
             <option value="75%">75% Scale</option>
             <option value="50%">50% Scale</option>
@@ -764,7 +764,7 @@
           <label class="control-label" style="display:block; margin-bottom: 6px;">Codec</label>
           <select id="codecSelect">
             <option value="h264">H.264 (Universal)</option>
-            <option value="h265">H.265 / HEVC (High Efficiency)</option>
+            <option value="h265">H.265 / HEVC</option>
           </select>
         </div>
         <div>
@@ -775,6 +775,14 @@
             <option value="64k">64 kbps (Voice)</option>
             <option value="copy">Keep Original Audio</option>
             <option value="mute">Mute (Remove Audio)</option>
+          </select>
+        </div>
+        <div>
+          <label class="control-label" style="display:block; margin-bottom: 6px;">Encoding Speed</label>
+          <select id="speedSelect">
+            <option value="4.0">⚡ 4x Turbo (Recommended)</option>
+            <option value="8.0">🚀 8x Hyper (Ultra Fast)</option>
+            <option value="2.0">🎯 2x High Precision</option>
           </select>
         </div>
       </div>
@@ -1257,7 +1265,10 @@
       recorder.start(500);
 
       const startTime = Date.now();
-      video.playbackRate = 1.5; // Fast processing in browser
+      const speedSelect = document.getElementById('speedSelect');
+      const turboRate = speedSelect ? parseFloat(speedSelect.value) : 4.0;
+      video.playbackRate = turboRate;
+      video.preservesPitch = false; // Disable audio time-stretching overhead
       await video.play();
 
       function renderFrame() {

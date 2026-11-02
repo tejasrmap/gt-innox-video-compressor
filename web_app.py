@@ -302,6 +302,11 @@ INDEX_HTML = """<!DOCTYPE html>
       margin: 0;
       padding: 0;
       font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .mobile-only-text {
+      display: none;
     }
 
     body {
@@ -866,11 +871,21 @@ INDEX_HTML = """<!DOCTYPE html>
       body {
         padding: 0;
       }
+      .desktop-only-text {
+        display: none !important;
+      }
+      .mobile-only-text {
+        display: block !important;
+      }
+      .tab-desktop-text {
+        display: none !important;
+      }
       .top-navbar {
-        padding: 8px 14px;
+        padding: 8px 12px;
+        padding-top: max(8px, env(safe-area-inset-top));
       }
       .nav-logo-svg {
-        height: 28px;
+        height: 26px;
       }
       .nav-links {
         gap: 6px;
@@ -880,10 +895,10 @@ INDEX_HTML = """<!DOCTYPE html>
         font-size: 11px;
       }
       .container {
-        padding: 14px 10px 32px;
+        padding: 12px 10px 32px;
       }
       header {
-        margin-bottom: 18px;
+        margin-bottom: 16px;
       }
       .gt-badge-pill {
         font-size: 10px;
@@ -892,20 +907,21 @@ INDEX_HTML = """<!DOCTYPE html>
       }
       h1 {
         font-size: 24px;
-        letter-spacing: -0.5px;
+        letter-spacing: -0.6px;
         margin-bottom: 6px;
       }
       .subtitle {
-        font-size: 12px;
+        font-size: 13px;
         line-height: 1.4;
       }
       .glass-card {
         padding: 16px 12px;
-        border-radius: 14px;
+        border-radius: 16px;
         margin-bottom: 14px;
       }
       .dropzone {
         padding: 32px 12px;
+        border-radius: 14px;
       }
       .dropzone-icon {
         width: 48px;
@@ -914,6 +930,7 @@ INDEX_HTML = """<!DOCTYPE html>
       }
       .dropzone h3 {
         font-size: 16px;
+        font-weight: 700;
       }
       .dropzone p {
         font-size: 12px;
@@ -932,13 +949,12 @@ INDEX_HTML = """<!DOCTYPE html>
       .info-pill-val {
         font-size: 13px;
       }
-      /* Native-like horizontal touch chips on mobile */
       .presets-row {
         display: flex;
         overflow-x: auto;
         scroll-snap-type: x mandatory;
         gap: 8px;
-        padding-bottom: 6px;
+        padding: 2px 2px 8px;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
         margin: 12px 0 16px;
@@ -950,6 +966,7 @@ INDEX_HTML = """<!DOCTYPE html>
         flex: 0 0 142px;
         scroll-snap-align: start;
         padding: 10px;
+        border-radius: 12px;
       }
       .preset-title {
         font-size: 12px;
@@ -961,8 +978,9 @@ INDEX_HTML = """<!DOCTYPE html>
         margin-bottom: 14px;
       }
       .tab-btn {
-        padding: 8px;
+        padding: 10px 6px;
         font-size: 12px;
+        font-weight: 700;
       }
       .control-label {
         font-size: 13px;
@@ -971,21 +989,38 @@ INDEX_HTML = """<!DOCTYPE html>
         font-size: 12px;
         padding: 2px 8px;
       }
+      input[type=range] {
+        height: 8px;
+        margin: 10px 0;
+      }
+      input[type=range]::-webkit-slider-thumb {
+        width: 28px;
+        height: 28px;
+        box-shadow: 0 0 14px var(--gt-cyan);
+      }
       .grid-4 {
         grid-template-columns: 1fr 1fr;
-        gap: 8px;
+        gap: 10px;
       }
       select {
-        padding: 8px 6px;
-        font-size: 12px;
+        padding: 10px 8px;
+        font-size: 16px !important; /* Prevents auto-zoom in iOS Safari */
+        min-height: 44px;
+        border-radius: 10px;
       }
       .btn {
-        padding: 12px 16px;
-        font-size: 14px;
+        padding: 14px 18px;
+        font-size: 15px;
+        min-height: 48px;
+        border-radius: 12px;
       }
       .comparison-grid {
         grid-template-columns: 1fr;
         gap: 12px;
+      }
+      video {
+        max-height: 220px;
+        border-radius: 8px;
       }
       .results-hero .savings-badge {
         font-size: 14px;
@@ -993,7 +1028,7 @@ INDEX_HTML = """<!DOCTYPE html>
       }
       .results-action-row {
         flex-direction: column !important;
-        gap: 8px !important;
+        gap: 10px !important;
       }
       .results-action-row .btn {
         width: 100% !important;
@@ -1009,6 +1044,9 @@ INDEX_HTML = """<!DOCTYPE html>
       }
       .grid-4 {
         grid-template-columns: 1fr;
+      }
+      h1 {
+        font-size: 22px;
       }
     }
   </style>
@@ -1081,8 +1119,10 @@ INDEX_HTML = """<!DOCTYPE html>
             <line x1="12" y1="3" x2="12" y2="15"></line>
           </svg>
         </div>
-        <h3>Drop your video here, or browse</h3>
-        <p>Supports MP4, MOV, MKV, AVI, WebM (Any resolution up to 4K / 60fps)</p>
+        <h3 class="desktop-only-text">Drop your video here, or browse</h3>
+        <h3 class="mobile-only-text">📱 Tap to select video</h3>
+        <p class="desktop-only-text">Supports MP4, MOV, MKV, AVI, WebM (Any resolution up to 4K / 60fps)</p>
+        <p class="mobile-only-text">Select from Photo Library or Files (MP4, MOV, WebM)</p>
         <input type="file" id="fileInput" accept="video/*">
       </div>
     </div>
@@ -1143,8 +1183,8 @@ INDEX_HTML = """<!DOCTYPE html>
 
       <!-- Mode Selector -->
       <div class="tab-group">
-        <button class="tab-btn active" id="tabCrf">Constant Quality (CRF Mode)</button>
-        <button class="tab-btn" id="tabTarget">Target File Size (MB Ceiling)</button>
+        <button class="tab-btn active" id="tabCrf"><span class="tab-desktop-text">Constant </span>Quality (CRF)</button>
+        <button class="tab-btn" id="tabTarget">Target Size (MB)</button>
       </div>
 
       <!-- CRF Slider -->

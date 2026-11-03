@@ -18,7 +18,7 @@ import webbrowser
 from typing import Dict, Any, Optional
 
 import uvicorn
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import StreamingResponse as StarletteStreamingResponse
@@ -56,8 +56,13 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 
 @app.get("/api/health")
 @app.get("/health")
-async def health_check():
-    return {"status": "healthy", "service": "GT INNOX Studio"}
+async def health_check(request: Request):
+    return {
+        "status": "healthy",
+        "service": "GT INNOX Studio",
+        "scope_path": request.scope.get("path"),
+        "headers": dict(request.headers)
+    }
 
 @app.post("/api/upload")
 async def upload_video(file: UploadFile = File(...)):

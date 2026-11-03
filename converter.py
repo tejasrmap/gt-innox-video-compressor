@@ -15,6 +15,7 @@ import docx
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import fitz  # PyMuPDF
+from PIL import Image
 
 
 def format_file_size(num_bytes: int) -> str:
@@ -401,4 +402,241 @@ def convert_pdf_to_word(pdf_source, output_docx_path: str = None) -> dict:
         "converted_size_formatted": format_file_size(len(final_docx_bytes)),
         "time_taken_sec": duration,
     }
+
+
+def parse_page_ranges(range_str: str, max_pages: int) -> list:
+    """Parses a string like '1-3, 5, 8' into a 0-indexed list of page indices."""
+    if not range_str or range_str.strip().lower() == "all":
+        return list(range(max_pages))
+
+    pages = set()
+    parts = [p.strip() for p in range_str.split(",") if p.strip()]
+    for part in parts:
+        if "-" in part:
+            sub = part.split("-")
+            try:
+                start = int(sub[0].strip())
+                end = int(sub[1].strip())
+                if start > end:
+                    start, end = end, start
+                for p in range(start, end + 1):
+                    if 1 <= p <= max_pages:
+                        pages.add(p - 1)
+            except ValueError:
+                continue
+        else:
+            try:
+                p = int(part.strip())
+                if 1 <= p <= max_pages:
+                    pages.add(p - 1)
+            except ValueError:
+                continue
+    return sorted(list(pages))
+
+
+def compress_pdf(pdf_source, quality_level: str = "balanced", output_pdf_path: str = None) -> dict:
+    """
+    Compresses a PDF document by recompressing embedded images, deflating streams,
+    and removing garbage/orphaned objects.
+    quality_level: 'extreme' (72-96 dpi, max savings), 'balanced' (150 dpi), 'lossless' (clean + deflate only).
+    """
+    start_time = time.time()
+
+    if isinstance(pdf_source, bytes):
+        orig_bytes = pdf_source
+        doc = fitz.open("pdf", orig_bytes)
+    elif hasattr(pdf_source, "read"):
+        orig_bytes = pdf_source.read()
+        doc = fitz.open("pdf", orig_bytes)
+    else:
+        with open(pdf_source, "rb") as f:
+            orig_bytes = f.read()
+        doc = fitz.open(pdf_source)
+
+    orig_size = len(orig_bytes)
+    page_count = len(doc)
+
+    # Process images if not pure lossless
+    if quality_level in ["extreme", "balanced"]:
+        max_dim = 1100 if quality_level == "extreme" else 1600
+        jpeg_quality = 55 if quality_level == "extreme" else 75
+
+        seen_xrefs = set()
+        for page in doc:
+            for img_info in page.get_images(full=True):
+                xref = img_info[0]
+                if xref in seen_xrefs:
+                    continue
+                seen_xrefs.add(xref)
+                try:
+                    base_img = doc.extract_image(xref)
+                    if not base_img or not base_img.get("image"):
+                        continue
+
+                    img_data = base_img["image"]
+                    if len(img_data) < 4096:
+                        continue
+
+                    pil_img = Image.open(io.BytesIO(img_data))
+                    orig_w, orig_h = pil_img.size
+
+                    needs_resize = orig_w > max_dim or orig_h > max_dim
+                    if needs_resize:
+                        scale = min(max_dim / orig_w, max_dim / orig_h)
+                        new_w = max(1, int(orig_w * scale))
+                        new_h = max(1, int(orig_h * scale))
+                        pil_img = pil_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+                    if pil_img.mode in ("RGBA", "LA", "P"):
+                        bg = Image.new("RGB", pil_img.size, (255, 255, 255))
+                        if pil_img.mode == "RGBA":
+                            bg.paste(pil_img, mask=pil_img.split()[-1])
+                        else:
+                            bg.paste(pil_img.convert("RGB"))
+                        pil_img = bg
+                    elif pil_img.mode != "RGB":
+                        pil_img = pil_img.convert("RGB")
+
+                    buf = io.BytesIO()
+                    pil_img.save(buf, format="JPEG", quality=jpeg_quality, optimize=True)
+                    new_img_bytes = buf.getvalue()
+
+                    if len(new_img_bytes) < len(img_data):
+                        page.replace_image(xref, stream=new_img_bytes)
+                except Exception:
+                    pass
+
+    out_buf = io.BytesIO()
+    doc.save(out_buf, garbage=4, deflate=True, clean=True, deflate_images=True, deflate_fonts=True)
+    compressed_bytes = out_buf.getvalue()
+    doc.close()
+
+    if len(compressed_bytes) >= orig_size:
+        compressed_bytes = orig_bytes
+
+    if output_pdf_path:
+        with open(output_pdf_path, "wb") as f:
+            f.write(compressed_bytes)
+
+    saved_bytes = max(0, orig_size - len(compressed_bytes))
+    saved_percent = round((saved_bytes / orig_size) * 100, 1) if orig_size > 0 else 0.0
+    duration = round(time.time() - start_time, 2)
+
+    return {
+        "pdf_bytes": compressed_bytes,
+        "page_count": page_count,
+        "original_size": orig_size,
+        "original_size_formatted": format_file_size(orig_size),
+        "compressed_size": len(compressed_bytes),
+        "compressed_size_formatted": format_file_size(len(compressed_bytes)),
+        "saved_bytes": saved_bytes,
+        "saved_bytes_formatted": format_file_size(saved_bytes),
+        "saved_percent": saved_percent,
+        "time_taken_sec": duration,
+    }
+
+
+def merge_pdfs(pdf_sources: list, output_pdf_path: str = None) -> dict:
+    """
+    Merges multiple PDF documents into a single unified PDF.
+    pdf_sources: list of bytes or file paths.
+    """
+    start_time = time.time()
+    merged_doc = fitz.open()
+    total_input_bytes = 0
+    file_count = 0
+
+    for src in pdf_sources:
+        try:
+            if isinstance(src, bytes):
+                total_input_bytes += len(src)
+                sub_doc = fitz.open("pdf", src)
+            elif hasattr(src, "read"):
+                b = src.read()
+                total_input_bytes += len(b)
+                sub_doc = fitz.open("pdf", b)
+            else:
+                total_input_bytes += os.path.getsize(src)
+                sub_doc = fitz.open(src)
+
+            merged_doc.insert_pdf(sub_doc)
+            sub_doc.close()
+            file_count += 1
+        except Exception:
+            continue
+
+    page_count = len(merged_doc)
+    out_buf = io.BytesIO()
+    merged_doc.save(out_buf, garbage=3, deflate=True)
+    merged_bytes = out_buf.getvalue()
+    merged_doc.close()
+
+    if output_pdf_path:
+        with open(output_pdf_path, "wb") as f:
+            f.write(merged_bytes)
+
+    duration = round(time.time() - start_time, 2)
+    return {
+        "pdf_bytes": merged_bytes,
+        "file_count": file_count,
+        "page_count": page_count,
+        "original_size": total_input_bytes,
+        "original_size_formatted": format_file_size(total_input_bytes),
+        "merged_size": len(merged_bytes),
+        "merged_size_formatted": format_file_size(len(merged_bytes)),
+        "time_taken_sec": duration,
+    }
+
+
+def split_pdf(pdf_source, page_range_str: str = "1", output_pdf_path: str = None) -> dict:
+    """
+    Extracts pages specified by page_range_str (e.g. '1-3, 5') into a new PDF.
+    """
+    start_time = time.time()
+
+    if isinstance(pdf_source, bytes):
+        orig_bytes = pdf_source
+        src_doc = fitz.open("pdf", orig_bytes)
+    elif hasattr(pdf_source, "read"):
+        orig_bytes = pdf_source.read()
+        src_doc = fitz.open("pdf", orig_bytes)
+    else:
+        with open(pdf_source, "rb") as f:
+            orig_bytes = f.read()
+        src_doc = fitz.open(pdf_source)
+
+    total_pages = len(src_doc)
+    target_pages = parse_page_ranges(page_range_str, total_pages)
+
+    if not target_pages:
+        target_pages = list(range(min(1, total_pages)))
+
+    out_doc = fitz.open()
+    for p_idx in target_pages:
+        out_doc.insert_pdf(src_doc, from_page=p_idx, to_page=p_idx)
+
+    src_doc.close()
+
+    out_buf = io.BytesIO()
+    out_doc.save(out_buf, garbage=3, deflate=True)
+    split_bytes = out_buf.getvalue()
+    out_doc.close()
+
+    if output_pdf_path:
+        with open(output_pdf_path, "wb") as f:
+            f.write(split_bytes)
+
+    duration = round(time.time() - start_time, 2)
+    return {
+        "pdf_bytes": split_bytes,
+        "extracted_page_count": len(target_pages),
+        "total_pages": total_pages,
+        "extracted_pages_list": [p + 1 for p in target_pages],
+        "original_size": len(orig_bytes),
+        "original_size_formatted": format_file_size(len(orig_bytes)),
+        "split_size": len(split_bytes),
+        "split_size_formatted": format_file_size(len(split_bytes)),
+        "time_taken_sec": duration,
+    }
+
 

@@ -53,6 +53,12 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 # API Endpoints
 # =====================================================================
 
+
+@app.get("/api/health")
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "GT INNOX Studio"}
+
 @app.post("/api/upload")
 async def upload_video(file: UploadFile = File(...)):
     """Uploads a video and returns its technical metadata."""
@@ -269,6 +275,9 @@ CONVERT_TASKS: Dict[str, Dict[str, Any]] = {}
 
 
 @app.post("/api/convert/word-to-pdf")
+@app.post("/convert/word-to-pdf")
+@app.post("/api/word-to-pdf")
+@app.post("/word-to-pdf")
 async def convert_docx_endpoint(file: UploadFile = File(...)):
     """Converts uploaded Word (.docx) document to print-ready PDF."""
     if not file.filename.lower().endswith(('.docx', '.doc')):
@@ -309,6 +318,9 @@ async def convert_docx_endpoint(file: UploadFile = File(...)):
 
 
 @app.post("/api/convert/pdf-to-word")
+@app.post("/convert/pdf-to-word")
+@app.post("/api/pdf-to-word")
+@app.post("/pdf-to-word")
 async def convert_pdf_endpoint(file: UploadFile = File(...)):
     """Converts uploaded PDF document to editable Word (.docx)."""
     if not file.filename.lower().endswith('.pdf'):
@@ -349,6 +361,7 @@ async def convert_pdf_endpoint(file: UploadFile = File(...)):
 
 
 @app.get("/api/download-converted/{task_id}")
+@app.get("/download-converted/{task_id}")
 async def download_converted_file(task_id: str):
     """Downloads a converted Word or PDF document."""
     task = CONVERT_TASKS.get(task_id)
@@ -363,6 +376,7 @@ async def download_converted_file(task_id: str):
     )
 
 @app.post("/api/pdf/compress")
+@app.post("/pdf/compress")
 async def compress_pdf_endpoint(file: UploadFile = File(...), quality: str = Form("balanced")):
     """Compresses uploaded PDF document (balanced, extreme, or lossless)."""
     if not file.filename.lower().endswith(".pdf"):
@@ -406,6 +420,7 @@ async def compress_pdf_endpoint(file: UploadFile = File(...), quality: str = For
 
 
 @app.post("/api/pdf/merge")
+@app.post("/pdf/merge")
 async def merge_pdf_endpoint(files: list[UploadFile] = File(...)):
     """Merges multiple uploaded PDF documents into a single PDF."""
     if not files or len(files) < 2:
@@ -452,6 +467,7 @@ async def merge_pdf_endpoint(files: list[UploadFile] = File(...)):
 
 
 @app.post("/api/pdf/split")
+@app.post("/pdf/split")
 async def split_pdf_endpoint(file: UploadFile = File(...), pages: str = Form("1")):
     """Extracts specified page range (e.g. '1-3, 5') from a PDF."""
     if not file.filename.lower().endswith(".pdf"):
@@ -494,6 +510,7 @@ async def split_pdf_endpoint(file: UploadFile = File(...), pages: str = Form("1"
 
 
 @app.post("/api/pdf/to-jpg")
+@app.post("/pdf/to-jpg")
 async def convert_pdf_to_jpg_endpoint(file: UploadFile = File(...), dpi: int = Form(150)):
     """Converts uploaded PDF document into JPG images (or ZIP for multi-page)."""
     if not file.filename.lower().endswith(".pdf"):

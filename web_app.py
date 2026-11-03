@@ -25,6 +25,7 @@ from starlette.responses import StreamingResponse as StarletteStreamingResponse
 
 # Import core video compressor logic from video.py
 from video import VideoCompressor, get_video_info, format_size, format_duration, get_ffmpeg_path
+import converter
 
 app = FastAPI(
     title="GT INNOX Video Compressor",
@@ -263,6 +264,106 @@ async def stream_endpoint(task_id: str, video_type: str):
 
 
 # =====================================================================
+# Document Conversion Tasks & State
+CONVERT_TASKS: Dict[str, Dict[str, Any]] = {}
+
+
+@app.post("/api/convert/word-to-pdf")
+async def convert_docx_endpoint(file: UploadFile = File(...)):
+    """Converts uploaded Word (.docx) document to print-ready PDF."""
+    if not file.filename.lower().endswith(('.docx', '.doc')):
+        raise HTTPException(status_code=400, detail="Please upload a valid Word document (.docx or .doc).")
+
+    file_bytes = await file.read()
+    if len(file_bytes) == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    task_id = str(uuid.uuid4())
+    base_name = os.path.splitext(file.filename)[0]
+    out_pdf_name = f"{base_name}_GT_INNOX.pdf"
+    out_pdf_path = os.path.join(TEMP_DIR, f"{task_id}_{out_pdf_name}")
+
+    try:
+        res = converter.convert_word_to_pdf(file_bytes, out_pdf_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Conversion error: {str(e)}")
+
+    CONVERT_TASKS[task_id] = {
+        "file_path": out_pdf_path,
+        "filename": out_pdf_name,
+        "media_type": "application/pdf"
+    }
+
+    return {
+        "task_id": task_id,
+        "original_filename": file.filename,
+        "converted_filename": out_pdf_name,
+        "page_count": res["page_count"],
+        "original_size": res["original_size"],
+        "original_size_formatted": res["original_size_formatted"],
+        "converted_size": res["converted_size"],
+        "converted_size_formatted": res["converted_size_formatted"],
+        "time_taken_sec": res["time_taken_sec"],
+        "download_url": f"/api/download-converted/{task_id}"
+    }
+
+
+@app.post("/api/convert/pdf-to-word")
+async def convert_pdf_endpoint(file: UploadFile = File(...)):
+    """Converts uploaded PDF document to editable Word (.docx)."""
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Please upload a valid PDF document (.pdf).")
+
+    file_bytes = await file.read()
+    if len(file_bytes) == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    task_id = str(uuid.uuid4())
+    base_name = os.path.splitext(file.filename)[0]
+    out_docx_name = f"{base_name}_GT_INNOX.docx"
+    out_docx_path = os.path.join(TEMP_DIR, f"{task_id}_{out_docx_name}")
+
+    try:
+        res = converter.convert_pdf_to_word(file_bytes, out_docx_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Conversion error: {str(e)}")
+
+    CONVERT_TASKS[task_id] = {
+        "file_path": out_docx_path,
+        "filename": out_docx_name,
+        "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+
+    return {
+        "task_id": task_id,
+        "original_filename": file.filename,
+        "converted_filename": out_docx_name,
+        "page_count": res["page_count"],
+        "original_size": res["original_size"],
+        "original_size_formatted": res["original_size_formatted"],
+        "converted_size": res["converted_size"],
+        "converted_size_formatted": res["converted_size_formatted"],
+        "time_taken_sec": res["time_taken_sec"],
+        "download_url": f"/api/download-converted/{task_id}"
+    }
+
+
+@app.get("/api/download-converted/{task_id}")
+async def download_converted_file(task_id: str):
+    """Downloads a converted Word or PDF document."""
+    task = CONVERT_TASKS.get(task_id)
+    if not task or not os.path.isfile(task["file_path"]):
+        raise HTTPException(status_code=404, detail="Converted file not found")
+
+    return FileResponse(
+        task["file_path"],
+        filename=task["filename"],
+        media_type=task["media_type"],
+        headers={"Content-Disposition": f'attachment; filename="{task["filename"]}"'}
+    )
+
+
+# =====================================================================
 # Embedded Modern Frontend with GT INNOX Branding
 # =====================================================================
 
@@ -271,7 +372,13 @@ INDEX_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>GT INNOX Video Compressor Studio</title>
+  <meta name="theme-color" content="#07090e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="GT INNOX">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>GT INNOX Studio • Video Compressor & Document Converters</title>
   
   <!-- Favicon: GT INNOX Monogram -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,4 94,27 94,73 50,96 6,73 6,27' fill='%231E1B4B' stroke='%2300F5FF' stroke-width='4'/><path d='M52 26 C36 26 26 36 26 50 C26 64 36 74 52 74 C62 74 68 70 71 63 L71 52 L48 52 L48 44 L79 44 L79 66 C72 77 62 81 50 81 C30 81 18 68 18 50 C18 32 30 19 51 19 C62 19 70 23 76 29 Z' fill='%2300F5FF'/><path d='M40 33 L78 33 L78 40 L63 40 L63 67 L55 67 L55 40 L40 40 Z' fill='%23FFFFFF'/></svg>">
@@ -288,6 +395,8 @@ INDEX_HTML = """<!DOCTYPE html>
       --gt-cyan: #00f5ff;
       --gt-indigo: #6366f1;
       --gt-pink: #ec4899;
+      --gt-blue: #3b82f6;
+      --gt-rose: #f43f5e;
       --gt-gradient: linear-gradient(135deg, #00f5ff 0%, #6366f1 50%, #ec4899 100%);
       --gt-gradient-subtle: linear-gradient(135deg, rgba(0, 245, 255, 0.15) 0%, rgba(99, 102, 241, 0.15) 50%, rgba(236, 72, 153, 0.15) 100%);
       --text-main: #f8fafc;
@@ -318,9 +427,15 @@ INDEX_HTML = """<!DOCTYPE html>
       background-attachment: fixed;
       color: var(--text-main);
       min-height: 100vh;
+      min-height: -webkit-fill-available;
       display: flex;
       flex-direction: column;
       align-items: center;
+      overflow-x: hidden;
+    }
+
+    html {
+      height: -webkit-fill-available;
     }
 
     .top-navbar {
@@ -328,10 +443,14 @@ INDEX_HTML = """<!DOCTYPE html>
       border-bottom: 1px solid var(--card-border);
       background: rgba(7, 9, 14, 0.85);
       backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
       position: sticky;
       top: 0;
       z-index: 100;
       padding: 12px 24px;
+      padding-top: max(12px, env(safe-area-inset-top));
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -343,6 +462,7 @@ INDEX_HTML = """<!DOCTYPE html>
       gap: 12px;
       text-decoration: none;
       color: inherit;
+      touch-action: manipulation;
     }
 
     .nav-logo-svg {
@@ -367,6 +487,7 @@ INDEX_HTML = """<!DOCTYPE html>
       text-decoration: none;
       transition: all 0.25s ease;
       cursor: pointer;
+      touch-action: manipulation;
     }
 
     .btn-github {
@@ -394,12 +515,14 @@ INDEX_HTML = """<!DOCTYPE html>
     .container {
       width: 100%;
       max-width: 980px;
-      padding: 36px 20px 48px;
+      padding: 28px 20px 48px;
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
     }
 
     header {
       text-align: center;
-      margin-bottom: 32px;
+      margin-bottom: 24px;
     }
 
     .gt-badge-pill {
@@ -415,26 +538,75 @@ INDEX_HTML = """<!DOCTYPE html>
       font-weight: 700;
       letter-spacing: 1px;
       text-transform: uppercase;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
       box-shadow: 0 0 20px rgba(0, 245, 255, 0.15);
     }
 
     h1 {
-      font-size: 44px;
+      font-size: 40px;
       font-weight: 900;
       letter-spacing: -1.2px;
       background: var(--gt-gradient);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
+      line-height: 1.15;
     }
 
     .subtitle {
       color: var(--text-muted);
-      font-size: 16px;
+      font-size: 15px;
       max-width: 620px;
       margin: 0 auto;
       line-height: 1.5;
+    }
+
+    /* Studio Navigation Tabs */
+    .studio-nav-bar {
+      display: flex;
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-md);
+      padding: 5px;
+      margin-bottom: 24px;
+      gap: 6px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    .studio-nav-bar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .studio-tab-btn {
+      flex: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 16px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-weight: 700;
+      font-size: 14px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.25s ease;
+      touch-action: manipulation;
+      white-space: nowrap;
+    }
+
+    .studio-tab-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .studio-tab-btn.active {
+      background: var(--gt-gradient-subtle);
+      color: #fff;
+      border: 1px solid rgba(0, 245, 255, 0.35);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
     }
 
     .glass-card {
@@ -443,7 +615,7 @@ INDEX_HTML = """<!DOCTYPE html>
       -webkit-backdrop-filter: blur(20px);
       border: 1px solid var(--card-border);
       border-radius: var(--radius-lg);
-      padding: 30px;
+      padding: 28px;
       box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
       margin-bottom: 24px;
       position: relative;
@@ -462,13 +634,14 @@ INDEX_HTML = """<!DOCTYPE html>
     }
 
     .dropzone {
-      border: 2px dashed rgba(255, 255, 255, 0.15);
+      border: 2px dashed rgba(255, 255, 255, 0.18);
       border-radius: var(--radius-lg);
-      padding: 56px 24px;
+      padding: 50px 24px;
       text-align: center;
       cursor: pointer;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       background: rgba(255, 255, 255, 0.015);
+      touch-action: manipulation;
     }
 
     .dropzone:hover, .dropzone.dragover {
@@ -476,6 +649,34 @@ INDEX_HTML = """<!DOCTYPE html>
       background: rgba(0, 245, 255, 0.05);
       transform: translateY(-2px);
       box-shadow: 0 12px 30px rgba(0, 245, 255, 0.15);
+    }
+
+    .dropzone:active {
+      transform: scale(0.99);
+    }
+
+    /* Word Theme Accent */
+    .dropzone-word:hover, .dropzone-word.dragover {
+      border-color: #38bdf8;
+      background: rgba(56, 189, 248, 0.05);
+      box-shadow: 0 12px 30px rgba(56, 189, 248, 0.15);
+    }
+    .icon-word {
+      background: rgba(56, 189, 248, 0.12) !important;
+      border: 1px solid rgba(56, 189, 248, 0.3) !important;
+      color: #38bdf8 !important;
+    }
+
+    /* PDF Theme Accent */
+    .dropzone-pdf:hover, .dropzone-pdf.dragover {
+      border-color: #fb7185;
+      background: rgba(251, 113, 133, 0.05);
+      box-shadow: 0 12px 30px rgba(251, 113, 133, 0.15);
+    }
+    .icon-pdf {
+      background: rgba(251, 113, 133, 0.12) !important;
+      border: 1px solid rgba(251, 113, 133, 0.3) !important;
+      color: #fb7185 !important;
     }
 
     .dropzone-icon {
@@ -502,11 +703,39 @@ INDEX_HTML = """<!DOCTYPE html>
       font-size: 14px;
     }
 
-    #fileInput {
+    .dropzone-mobile-chips {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    .mobile-chip {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--gt-cyan);
+      background: rgba(0, 245, 255, 0.08);
+      border: 1px solid rgba(0, 245, 255, 0.2);
+      border-radius: 999px;
+      padding: 4px 10px;
+    }
+    .chip-word {
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.08);
+      border-color: rgba(56, 189, 248, 0.25);
+    }
+    .chip-pdf {
+      color: #fb7185;
+      background: rgba(251, 113, 133, 0.08);
+      border-color: rgba(251, 113, 133, 0.25);
+    }
+
+    input[type="file"] {
       display: none;
     }
 
-    .video-info-grid {
+    .video-info-grid, .doc-info-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
       gap: 12px;
@@ -537,11 +766,15 @@ INDEX_HTML = """<!DOCTYPE html>
       font-family: 'JetBrains Mono', monospace;
     }
 
+    .presets-wrapper {
+      position: relative;
+      margin: 18px 0;
+    }
+
     .presets-row {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
       gap: 12px;
-      margin: 20px 0;
     }
 
     .preset-card {
@@ -552,11 +785,18 @@ INDEX_HTML = """<!DOCTYPE html>
       cursor: pointer;
       transition: all 0.25s ease;
       text-align: left;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
     }
 
     .preset-card:hover {
       background: rgba(255, 255, 255, 0.06);
       border-color: rgba(0, 245, 255, 0.4);
+    }
+
+    .preset-card:active {
+      transform: scale(0.97);
     }
 
     .preset-card.active {
@@ -590,7 +830,7 @@ INDEX_HTML = """<!DOCTYPE html>
 
     .tab-btn {
       flex: 1;
-      padding: 10px;
+      padding: 11px;
       border: none;
       background: transparent;
       color: var(--text-muted);
@@ -599,6 +839,7 @@ INDEX_HTML = """<!DOCTYPE html>
       border-radius: var(--radius-sm);
       cursor: pointer;
       transition: all 0.2s;
+      touch-action: manipulation;
     }
 
     .tab-btn.active {
@@ -626,7 +867,7 @@ INDEX_HTML = """<!DOCTYPE html>
 
     .control-badge {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 14px;
+      font-size: 13px;
       color: var(--gt-cyan);
       font-weight: 700;
       background: rgba(0, 245, 255, 0.1);
@@ -635,30 +876,53 @@ INDEX_HTML = """<!DOCTYPE html>
       border-radius: 6px;
     }
 
+    .slider-container {
+      position: relative;
+      padding: 8px 0;
+    }
+
     input[type=range] {
       width: 100%;
-      height: 6px;
-      border-radius: 3px;
+      height: 8px;
+      border-radius: 999px;
       background: rgba(255, 255, 255, 0.12);
       outline: none;
       -webkit-appearance: none;
+      appearance: none;
       cursor: pointer;
+      touch-action: pan-y;
+      margin: 12px 0;
     }
 
     input[type=range]::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
-      width: 18px;
-      height: 18px;
+      width: 24px;
+      height: 24px;
       border-radius: 50%;
       background: var(--gt-cyan);
-      box-shadow: 0 0 12px var(--gt-cyan);
+      box-shadow: 0 0 14px var(--gt-cyan);
       cursor: pointer;
-      transition: transform 0.15s;
+      transition: transform 0.15s, box-shadow 0.15s;
     }
 
     input[type=range]::-webkit-slider-thumb:hover {
       transform: scale(1.2);
+    }
+
+    input[type=range]::-webkit-slider-thumb:active {
+      transform: scale(1.3);
+      box-shadow: 0 0 20px var(--gt-cyan), 0 0 0 6px rgba(0, 245, 255, 0.25);
+    }
+
+    input[type=range]::-moz-range-thumb {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--gt-cyan);
+      border: none;
+      box-shadow: 0 0 14px var(--gt-cyan);
+      cursor: pointer;
     }
 
     .grid-4 {
@@ -670,8 +934,11 @@ INDEX_HTML = """<!DOCTYPE html>
 
     select {
       width: 100%;
-      padding: 11px 14px;
-      background: rgba(0, 0, 0, 0.35);
+      padding: 12px 36px 12px 14px;
+      background-color: rgba(0, 0, 0, 0.45);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2300f5ff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
       border: 1px solid var(--card-border);
       border-radius: var(--radius-sm);
       color: var(--text-main);
@@ -679,10 +946,13 @@ INDEX_HTML = """<!DOCTYPE html>
       outline: none;
       cursor: pointer;
       transition: border-color 0.2s;
+      -webkit-appearance: none;
+      appearance: none;
     }
 
     select:focus {
       border-color: var(--gt-cyan);
+      box-shadow: 0 0 0 2px rgba(0, 245, 255, 0.2);
     }
 
     .btn {
@@ -698,6 +968,13 @@ INDEX_HTML = """<!DOCTYPE html>
       cursor: pointer;
       transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
       text-decoration: none;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .btn:active {
+      transform: scale(0.98);
     }
 
     .btn-primary {
@@ -732,6 +1009,21 @@ INDEX_HTML = """<!DOCTYPE html>
       background: rgba(255, 255, 255, 0.1);
     }
 
+    .btn-share {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      color: #34d399;
+    }
+
+    .btn-share:hover {
+      background: rgba(16, 185, 129, 0.25);
+    }
+
+    .sticky-compress-wrapper {
+      margin-top: 14px;
+      width: 100%;
+    }
+
     .progress-track {
       width: 100%;
       height: 12px;
@@ -757,6 +1049,8 @@ INDEX_HTML = """<!DOCTYPE html>
       font-size: 13px;
       color: var(--text-muted);
       font-family: 'JetBrains Mono', monospace;
+      flex-wrap: wrap;
+      gap: 6px;
     }
 
     .results-hero {
@@ -775,8 +1069,51 @@ INDEX_HTML = """<!DOCTYPE html>
       color: #34d399;
       font-size: 18px;
       font-weight: 800;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
       box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
+      word-break: break-word;
+    }
+
+    .badge-word {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: rgba(56, 189, 248, 0.35);
+      color: #38bdf8;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.15);
+    }
+
+    .badge-pdf {
+      background: rgba(251, 113, 133, 0.15);
+      border-color: rgba(251, 113, 133, 0.35);
+      color: #fb7185;
+      box-shadow: 0 0 20px rgba(251, 113, 133, 0.15);
+    }
+
+    .mobile-comparison-switch {
+      display: none;
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      padding: 4px;
+      margin-bottom: 16px;
+    }
+
+    .mobile-comp-tab {
+      flex: 1;
+      padding: 8px 12px;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 13px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .mobile-comp-tab.active {
+      background: rgba(0, 245, 255, 0.16);
+      color: #fff;
+      border: 1px solid rgba(0, 245, 255, 0.3);
     }
 
     .comparison-grid {
@@ -800,6 +1137,7 @@ INDEX_HTML = """<!DOCTYPE html>
       background: rgba(255, 255, 255, 0.04);
       display: flex;
       justify-content: space-between;
+      align-items: center;
     }
 
     video {
@@ -832,6 +1170,7 @@ INDEX_HTML = """<!DOCTYPE html>
       width: 100%;
       border-top: 1px solid var(--card-border);
       padding: 30px 20px;
+      padding-bottom: max(30px, env(safe-area-inset-bottom));
       text-align: center;
       color: var(--text-muted);
       font-size: 13px;
@@ -854,6 +1193,7 @@ INDEX_HTML = """<!DOCTYPE html>
       justify-content: center;
       gap: 16px;
       margin-top: 12px;
+      flex-wrap: wrap;
     }
 
     .footer-links a {
@@ -881,67 +1221,78 @@ INDEX_HTML = """<!DOCTYPE html>
         display: none !important;
       }
       .top-navbar {
-        padding: 8px 12px;
-        padding-top: max(8px, env(safe-area-inset-top));
+        padding: 10px 14px;
+        padding-top: max(10px, env(safe-area-inset-top));
       }
       .nav-logo-svg {
-        height: 26px;
+        height: 28px;
       }
       .nav-links {
         gap: 6px;
       }
       .nav-pill-btn {
-        padding: 6px 10px;
+        padding: 6px 11px;
         font-size: 11px;
       }
       .container {
-        padding: 12px 10px 32px;
+        padding: 14px 12px 32px;
       }
       header {
-        margin-bottom: 16px;
+        margin-bottom: 14px;
       }
       .gt-badge-pill {
         font-size: 10px;
-        padding: 4px 10px;
+        padding: 4px 12px;
         margin-bottom: 8px;
       }
       h1 {
-        font-size: 24px;
+        font-size: 26px;
         letter-spacing: -0.6px;
         margin-bottom: 6px;
       }
       .subtitle {
         font-size: 13px;
-        line-height: 1.4;
+        line-height: 1.45;
+        padding: 0 4px;
       }
+
+      .studio-nav-bar {
+        padding: 4px;
+        margin-bottom: 16px;
+      }
+      .studio-tab-btn {
+        padding: 10px 12px;
+        font-size: 12px;
+      }
+
       .glass-card {
-        padding: 16px 12px;
+        padding: 16px 14px;
         border-radius: 16px;
-        margin-bottom: 14px;
+        margin-bottom: 16px;
       }
       .dropzone {
-        padding: 32px 12px;
+        padding: 36px 14px;
         border-radius: 14px;
       }
       .dropzone-icon {
-        width: 48px;
-        height: 48px;
-        margin-bottom: 10px;
+        width: 52px;
+        height: 52px;
+        margin-bottom: 12px;
       }
       .dropzone h3 {
-        font-size: 16px;
+        font-size: 17px;
         font-weight: 700;
       }
       .dropzone p {
         font-size: 12px;
       }
-      .video-info-grid {
+      .video-info-grid, .doc-info-grid {
         grid-template-columns: 1fr 1fr;
         gap: 8px;
-        margin-top: 10px;
+        margin-top: 12px;
       }
       .info-pill {
-        padding: 8px;
+        padding: 9px 8px;
       }
       .info-pill-label {
         font-size: 10px;
@@ -949,23 +1300,39 @@ INDEX_HTML = """<!DOCTYPE html>
       .info-pill-val {
         font-size: 13px;
       }
+
+      /* Horizontal scrolling carousel with edge hint */
+      .presets-wrapper {
+        position: relative;
+        margin: 14px 0 16px;
+      }
+      .presets-wrapper::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 8px;
+        width: 32px;
+        pointer-events: none;
+        background: linear-gradient(to right, transparent, rgba(15, 23, 42, 0.95));
+        border-radius: 0 12px 12px 0;
+      }
       .presets-row {
         display: flex;
         overflow-x: auto;
         scroll-snap-type: x mandatory;
         gap: 8px;
-        padding: 2px 2px 8px;
+        padding: 2px 30px 8px 2px;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
-        margin: 12px 0 16px;
       }
       .presets-row::-webkit-scrollbar {
         display: none;
       }
       .preset-card {
-        flex: 0 0 142px;
+        flex: 0 0 148px;
         scroll-snap-align: start;
-        padding: 10px;
+        padding: 11px 10px;
         border-radius: 12px;
       }
       .preset-title {
@@ -987,25 +1354,32 @@ INDEX_HTML = """<!DOCTYPE html>
       }
       .control-badge {
         font-size: 12px;
-        padding: 2px 8px;
+        padding: 3px 8px;
       }
+
+      /* Touch-friendly range slider */
       input[type=range] {
-        height: 8px;
-        margin: 10px 0;
+        height: 10px;
+        margin: 12px 0;
       }
       input[type=range]::-webkit-slider-thumb {
         width: 28px;
         height: 28px;
-        box-shadow: 0 0 14px var(--gt-cyan);
+        box-shadow: 0 0 16px var(--gt-cyan);
       }
+      input[type=range]::-moz-range-thumb {
+        width: 28px;
+        height: 28px;
+      }
+
       .grid-4 {
         grid-template-columns: 1fr 1fr;
         gap: 10px;
       }
       select {
-        padding: 10px 8px;
+        padding: 11px 32px 11px 10px;
         font-size: 16px !important; /* Prevents auto-zoom in iOS Safari */
-        min-height: 44px;
+        min-height: 46px;
         border-radius: 10px;
       }
       .btn {
@@ -1014,17 +1388,40 @@ INDEX_HTML = """<!DOCTYPE html>
         min-height: 48px;
         border-radius: 12px;
       }
+
+      /* Sticky Mobile Compression Launcher */
+      .sticky-compress-wrapper {
+        position: sticky;
+        bottom: max(10px, env(safe-area-inset-bottom));
+        z-index: 30;
+        padding: 6px;
+        background: rgba(7, 9, 14, 0.88);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid var(--card-border);
+        border-radius: 14px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+      }
+      .sticky-compress-wrapper .btn-primary {
+        box-shadow: 0 4px 18px rgba(0, 245, 255, 0.4);
+      }
+
+      /* Mobile Comparison Switcher */
+      .mobile-comparison-switch {
+        display: flex;
+      }
       .comparison-grid {
         grid-template-columns: 1fr;
         gap: 12px;
       }
       video {
-        max-height: 220px;
+        max-height: 230px;
         border-radius: 8px;
       }
       .results-hero .savings-badge {
         font-size: 14px;
-        padding: 6px 14px;
+        padding: 8px 16px;
+        line-height: 1.3;
       }
       .results-action-row {
         flex-direction: column !important;
@@ -1034,7 +1431,7 @@ INDEX_HTML = """<!DOCTYPE html>
         width: 100% !important;
       }
       footer {
-        padding: 20px 12px;
+        padding: 24px 14px;
       }
     }
 
@@ -1046,7 +1443,10 @@ INDEX_HTML = """<!DOCTYPE html>
         grid-template-columns: 1fr;
       }
       h1 {
-        font-size: 22px;
+        font-size: 23px;
+      }
+      .preset-card {
+        flex: 0 0 138px;
       }
     }
   </style>
@@ -1055,7 +1455,7 @@ INDEX_HTML = """<!DOCTYPE html>
 
   <!-- Top Navbar -->
   <nav class="top-navbar">
-    <a href="/" class="nav-brand">
+    <a href="/" class="nav-brand" aria-label="GT INNOX Studio Home">
       <svg class="nav-logo-svg" viewBox="0 0 520 120" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="navGtGrad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -1082,14 +1482,14 @@ INDEX_HTML = """<!DOCTYPE html>
     </a>
 
     <div class="nav-links">
-      <a href="https://vercel.com/new" target="_blank" class="nav-pill-btn btn-vercel">
+      <a href="https://vercel.com/new" target="_blank" rel="noopener" class="nav-pill-btn btn-vercel" title="Deploy on Vercel">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 2L2 22h20L12 2z"/>
         </svg>
         <span>Deploy</span>
       </a>
       
-      <a href="https://github.com/tejasrmap/gt-innox-video-compressor" target="_blank" class="nav-pill-btn btn-github">
+      <a href="https://github.com/tejasrmap/gt-innox-video-compressor" target="_blank" rel="noopener" class="nav-pill-btn btn-github" title="View Source on GitHub">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
         </svg>
@@ -1101,219 +1501,481 @@ INDEX_HTML = """<!DOCTYPE html>
   <div class="container">
     <header>
       <div class="gt-badge-pill">
-        <span>⚡ GT INNOX Next-Gen Media Lab</span>
+        <span>⚡ GT INNOX Studio & Doc Lab</span>
         <span>•</span>
-        <span>v1.0.0</span>
+        <span>v2.0.0</span>
       </div>
-      <h1>GT INNOX Video Compressor</h1>
-      <p class="subtitle">Next-generation high-fidelity video compression engine by GT INNOX. Compress 4K, 1080p, and high-bitrate videos with zero visible loss for Discord, WhatsApp, and Web.</p>
+      <h1>GT INNOX Studio</h1>
+      <p class="subtitle desktop-only-text">Next-generation high-fidelity video compressor & autonomous Word ⇄ PDF converters. Zero loss, 100% private, and engineered for high performance.</p>
+      <p class="subtitle mobile-only-text">Video Compressor & Word ⇄ PDF Converters. Fast, private, and high-fidelity.</p>
     </header>
 
-    <!-- STEP 1: UPLOAD DROPZONE -->
-    <div id="uploadSection" class="glass-card">
-      <div class="dropzone" id="dropzone">
-        <div class="dropzone-icon">
-          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="17 8 12 3 7 8"></polyline>
-            <line x1="12" y1="3" x2="12" y2="15"></line>
-          </svg>
-        </div>
-        <h3 class="desktop-only-text">Drop your video here, or browse</h3>
-        <h3 class="mobile-only-text">📱 Tap to select video</h3>
-        <p class="desktop-only-text">Supports MP4, MOV, MKV, AVI, WebM (Any resolution up to 4K / 60fps)</p>
-        <p class="mobile-only-text">Select from Photo Library or Files (MP4, MOV, WebM)</p>
-        <input type="file" id="fileInput" accept="video/*">
-      </div>
-    </div>
-
-    <!-- STEP 2: CONFIGURATION & PREVIEW CARD -->
-    <div id="configSection" class="glass-card hidden">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h3 id="videoTitle" style="font-size: 18px; font-weight: 700;">video_sample.mp4</h3>
-        <button class="btn btn-secondary" id="changeFileBtn" style="padding: 6px 14px; font-size: 12px;">Change Video</button>
-      </div>
-
-      <!-- Info Pills -->
-      <div class="video-info-grid">
-        <div class="info-pill">
-          <div class="info-pill-label">Original Size</div>
-          <div class="info-pill-val" id="infoSize">--</div>
-        </div>
-        <div class="info-pill">
-          <div class="info-pill-label">Duration</div>
-          <div class="info-pill-val" id="infoDuration">--</div>
-        </div>
-        <div class="info-pill">
-          <div class="info-pill-label">Resolution</div>
-          <div class="info-pill-val" id="infoRes">--</div>
-        </div>
-        <div class="info-pill">
-          <div class="info-pill-label">FPS</div>
-          <div class="info-pill-val" id="infoFps">--</div>
-        </div>
-      </div>
-
-      <!-- Presets -->
-      <div style="margin-top: 24px;">
-        <label class="control-label">GT INNOX Optimization Presets</label>
-        <div class="presets-row">
-          <div class="preset-card active" data-preset="balanced">
-            <div class="preset-title">⚖️ Balanced (Recommended)</div>
-            <div class="preset-desc">CRF 28 • High Fidelity</div>
-          </div>
-          <div class="preset-card" data-preset="whatsapp">
-            <div class="preset-title">📱 WhatsApp Limit</div>
-            <div class="preset-desc">Max 16 MB • 720p</div>
-          </div>
-          <div class="preset-card" data-preset="discord">
-            <div class="preset-title">💬 Discord Free</div>
-            <div class="preset-desc">Max 25 MB • Fast</div>
-          </div>
-          <div class="preset-card" data-preset="hq">
-            <div class="preset-title">💎 Cinema Master</div>
-            <div class="preset-desc">CRF 22 • Near Lossless</div>
-          </div>
-          <div class="preset-card" data-preset="extreme">
-            <div class="preset-title">🚀 Ultra Space Saver</div>
-            <div class="preset-desc">CRF 34 • 480p</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Mode Selector -->
-      <div class="tab-group">
-        <button class="tab-btn active" id="tabCrf"><span class="tab-desktop-text">Constant </span>Quality (CRF)</button>
-        <button class="tab-btn" id="tabTarget">Target Size (MB)</button>
-      </div>
-
-      <!-- CRF Slider -->
-      <div id="crfControlGroup" class="control-group">
-        <div class="control-header">
-          <span class="control-label">Visual Quality (CRF)</span>
-          <span class="control-badge" id="crfValBadge">CRF 28 (Balanced)</span>
-        </div>
-        <input type="range" id="crfSlider" min="18" max="42" value="28">
-      </div>
-
-      <!-- Target Size Slider -->
-      <div id="targetControlGroup" class="control-group hidden">
-        <div class="control-header">
-          <span class="control-label">Target Output Size</span>
-          <span class="control-badge" id="targetValBadge">24.5 MB</span>
-        </div>
-        <input type="range" id="targetSlider" min="2" max="150" value="25" step="0.5">
-      </div>
-
-      <!-- Advanced Settings Grid -->
-      <div class="grid-4">
-        <div>
-          <label class="control-label" style="display:block; margin-bottom: 6px;">Resolution</label>
-          <select id="scaleSelect">
-            <option value="Original">Keep Original</option>
-            <option value="1080p">1080p (Full HD)</option>
-            <option value="720p">720p (HD - Fast)</option>
-            <option value="480p">480p (SD - Fastest)</option>
-            <option value="360p">360p (Mobile)</option>
-            <option value="75%">75% Scale</option>
-            <option value="50%">50% Scale</option>
-          </select>
-        </div>
-        <div>
-          <label class="control-label" style="display:block; margin-bottom: 6px;">Codec</label>
-          <select id="codecSelect">
-            <option value="h264">H.264 (Universal)</option>
-            <option value="h265">H.265 / HEVC</option>
-          </select>
-        </div>
-        <div>
-          <label class="control-label" style="display:block; margin-bottom: 6px;">Audio Quality</label>
-          <select id="audioSelect">
-            <option value="128k">128 kbps (Balanced)</option>
-            <option value="96k">96 kbps (Compact)</option>
-            <option value="64k">64 kbps (Voice)</option>
-            <option value="copy">Keep Original Audio</option>
-            <option value="mute">Mute (Remove Audio)</option>
-          </select>
-        </div>
-        <div>
-          <label class="control-label" style="display:block; margin-bottom: 6px;">Profile</label>
-          <select id="profileSelect">
-            <option value="balanced">⚡ Balanced (Audio & Video Sync)</option>
-            <option value="max">🚀 Max Compression</option>
-            <option value="hq">💎 High Fidelity Audio/Video</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- Compress Button -->
-      <button class="btn btn-primary" id="startCompressBtn" style="margin-top: 12px;">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+    <!-- Studio Tool Navigation Switcher -->
+    <div class="studio-nav-bar" id="studioNavBar" role="tablist">
+      <button class="studio-tab-btn active" data-tool="video" role="tab" aria-selected="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <polygon points="23 7 16 12 23 17 23 7"></polygon>
+          <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
         </svg>
-        Execute GT INNOX Compression
+        <span>Video Compressor</span>
+      </button>
+
+      <button class="studio-tab-btn" data-tool="word-to-pdf" role="tab" aria-selected="false">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <line x1="16" y1="13" x2="8" y2="13"></line>
+          <line x1="16" y1="17" x2="8" y2="17"></line>
+          <polyline points="10 9 9 9 8 9"></polyline>
+        </svg>
+        <span>Word to PDF</span>
+      </button>
+
+      <button class="studio-tab-btn" data-tool="pdf-to-word" role="tab" aria-selected="false">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <path d="M12 18v-6"></path>
+          <path d="m9 15 3 3 3-3"></path>
+        </svg>
+        <span>PDF to Word</span>
       </button>
     </div>
 
-    <!-- STEP 3: PROGRESS BOX -->
-    <div id="progressSection" class="glass-card hidden">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <div class="spinner"></div>
-          <span style="font-weight: 700; font-size: 16px;">GT INNOX Engine Compressing...</span>
+    <!-- ============================================================== -->
+    <!-- VIEW 1: VIDEO COMPRESSOR TOOL                                  -->
+    <!-- ============================================================== -->
+    <div id="videoToolView">
+      <!-- STEP 1: UPLOAD DROPZONE -->
+      <div id="uploadSection" class="glass-card">
+        <div class="dropzone" id="dropzone">
+          <div class="dropzone-icon">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+          </div>
+          <h3 class="desktop-only-text">Drop your video here, or browse</h3>
+          <h3 class="mobile-only-text">📱 Tap to select video</h3>
+          <p class="desktop-only-text">Supports MP4, MOV, MKV, AVI, WebM (Any resolution up to 4K / 60fps)</p>
+          <p class="mobile-only-text">Select from Photo Library or Files (MP4, MOV, WebM)</p>
+          
+          <div class="dropzone-mobile-chips">
+            <span class="mobile-chip">⚡ Fast On-Device Engine</span>
+            <span class="mobile-chip">🔒 100% Private</span>
+            <span class="mobile-chip">🚀 4K & 1080p Ready</span>
+          </div>
+
+          <input type="file" id="fileInput" accept="video/*,video/mp4,video/quicktime,video/webm,video/x-m4v">
         </div>
-        <button class="btn btn-cancel" id="cancelBtn" style="padding: 6px 14px; font-size: 13px;">Cancel</button>
       </div>
 
-      <div class="progress-track">
-        <div class="progress-fill" id="progressFill"></div>
+      <!-- STEP 2: CONFIGURATION & PREVIEW CARD -->
+      <div id="configSection" class="glass-card hidden">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 8px;">
+          <h3 id="videoTitle" style="font-size: 17px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">video_sample.mp4</h3>
+          <button class="btn btn-secondary" id="changeFileBtn" style="padding: 6px 12px; font-size: 12px; white-space: nowrap; flex-shrink: 0;">Change Video</button>
+        </div>
+
+        <!-- Info Pills -->
+        <div class="video-info-grid">
+          <div class="info-pill">
+            <div class="info-pill-label">Original Size</div>
+            <div class="info-pill-val" id="infoSize">--</div>
+          </div>
+          <div class="info-pill">
+            <div class="info-pill-label">Duration</div>
+            <div class="info-pill-val" id="infoDuration">--</div>
+          </div>
+          <div class="info-pill">
+            <div class="info-pill-label">Resolution</div>
+            <div class="info-pill-val" id="infoRes">--</div>
+          </div>
+          <div class="info-pill">
+            <div class="info-pill-label">FPS</div>
+            <div class="info-pill-val" id="infoFps">--</div>
+          </div>
+        </div>
+
+        <!-- Presets with Mobile Scroll Wrapper -->
+        <div class="presets-wrapper">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <label class="control-label">GT INNOX Optimization Presets</label>
+            <span class="mobile-only-text" style="font-size: 11px; color: var(--gt-cyan); font-weight: 600;">Swipe for more 👉</span>
+          </div>
+          <div class="presets-row" id="presetsRow">
+            <div class="preset-card active" data-preset="balanced">
+              <div class="preset-title">⚖️ Balanced</div>
+              <div class="preset-desc">CRF 28 • High Fidelity</div>
+            </div>
+            <div class="preset-card" data-preset="whatsapp">
+              <div class="preset-title">📱 WhatsApp</div>
+              <div class="preset-desc">Max 16 MB • 720p</div>
+            </div>
+            <div class="preset-card" data-preset="discord">
+              <div class="preset-title">💬 Discord Free</div>
+              <div class="preset-desc">Max 25 MB • Fast</div>
+            </div>
+            <div class="preset-card" data-preset="hq">
+              <div class="preset-title">💎 Cinema Master</div>
+              <div class="preset-desc">CRF 22 • Near Lossless</div>
+            </div>
+            <div class="preset-card" data-preset="extreme">
+              <div class="preset-title">🚀 Space Saver</div>
+              <div class="preset-desc">CRF 34 • 480p</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mode Selector -->
+        <div class="tab-group">
+          <button class="tab-btn active" id="tabCrf"><span class="tab-desktop-text">Constant </span>Quality (CRF)</button>
+          <button class="tab-btn" id="tabTarget">Target Size (MB)</button>
+        </div>
+
+        <!-- CRF Slider -->
+        <div id="crfControlGroup" class="control-group">
+          <div class="control-header">
+            <span class="control-label">Visual Quality (CRF)</span>
+            <span class="control-badge" id="crfValBadge">CRF 28 (Balanced)</span>
+          </div>
+          <div class="slider-container">
+            <input type="range" id="crfSlider" min="18" max="42" value="28" aria-label="Visual Quality CRF Slider">
+          </div>
+        </div>
+
+        <!-- Target Size Slider -->
+        <div id="targetControlGroup" class="control-group hidden">
+          <div class="control-header">
+            <span class="control-label">Target Output Size</span>
+            <span class="control-badge" id="targetValBadge">24.5 MB</span>
+          </div>
+          <div class="slider-container">
+            <input type="range" id="targetSlider" min="2" max="150" value="25" step="0.5" aria-label="Target Output Size in MB">
+          </div>
+        </div>
+
+        <!-- Advanced Settings Grid -->
+        <div class="grid-4">
+          <div>
+            <label class="control-label" style="display:block; margin-bottom: 6px;">Resolution</label>
+            <select id="scaleSelect" aria-label="Output Resolution">
+              <option value="Original">Keep Original</option>
+              <option value="1080p">1080p (Full HD)</option>
+              <option value="720p">720p (HD - Fast)</option>
+              <option value="480p">480p (SD - Fastest)</option>
+              <option value="360p">360p (Mobile)</option>
+              <option value="75%">75% Scale</option>
+              <option value="50%">50% Scale</option>
+            </select>
+          </div>
+          <div>
+            <label class="control-label" style="display:block; margin-bottom: 6px;">Codec</label>
+            <select id="codecSelect" aria-label="Video Codec">
+              <option value="h264">H.264 (Universal)</option>
+              <option value="h265">H.265 / HEVC</option>
+            </select>
+          </div>
+          <div>
+            <label class="control-label" style="display:block; margin-bottom: 6px;">Audio Quality</label>
+            <select id="audioSelect" aria-label="Audio Quality">
+              <option value="128k">128 kbps (Balanced)</option>
+              <option value="96k">96 kbps (Compact)</option>
+              <option value="64k">64 kbps (Voice)</option>
+              <option value="copy">Keep Original Audio</option>
+              <option value="mute">Mute (Remove Audio)</option>
+            </select>
+          </div>
+          <div>
+            <label class="control-label" style="display:block; margin-bottom: 6px;">Profile</label>
+            <select id="profileSelect" aria-label="Encoding Profile">
+              <option value="balanced">⚡ Balanced (Audio & Video Sync)</option>
+              <option value="max">🚀 Max Compression</option>
+              <option value="hq">💎 High Fidelity Audio/Video</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Sticky Mobile Compression Trigger Wrapper -->
+        <div class="sticky-compress-wrapper">
+          <button class="btn btn-primary" id="startCompressBtn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+            Execute GT INNOX Compression
+          </button>
+        </div>
       </div>
 
-      <div class="progress-meta">
-        <span id="progressPct">0.0%</span>
-        <span id="progressSpeed">Speed: --</span>
-        <span id="progressEta">ETA: --</span>
+      <!-- STEP 3: PROGRESS BOX -->
+      <div id="progressSection" class="glass-card hidden">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="spinner"></div>
+            <span style="font-weight: 700; font-size: 15px;">GT INNOX Engine Compressing...</span>
+          </div>
+          <button class="btn btn-cancel" id="cancelBtn" style="padding: 6px 14px; font-size: 13px;">Cancel</button>
+        </div>
+
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+
+        <div class="progress-meta">
+          <span id="progressPct">0.0%</span>
+          <span id="progressSpeed">Speed: --</span>
+          <span id="progressEta">ETA: --</span>
+        </div>
+      </div>
+
+      <!-- STEP 4: RESULTS & COMPARISON -->
+      <div id="resultsSection" class="glass-card hidden">
+        <div class="results-hero">
+          <div class="savings-badge" id="savingsBadge">
+            🎉 Reduced by 74.2% (38.4 MB Saved)
+          </div>
+          <p style="color: var(--text-muted); font-size: 14px;">Optimized and packaged by GT INNOX.</p>
+        </div>
+
+        <!-- Mobile Segmented View Switcher -->
+        <div class="mobile-comparison-switch" id="mobileCompSwitch">
+          <button class="mobile-comp-tab active" data-view="compressed">⚡ Compressed</button>
+          <button class="mobile-comp-tab" data-view="original">Original</button>
+          <button class="mobile-comp-tab" data-view="both">Side-by-Side</button>
+        </div>
+
+        <div class="comparison-grid">
+          <div class="video-card" id="cardCompressed">
+            <div class="video-card-header" style="color: var(--gt-cyan);">
+              <span>⚡ GT INNOX Compressed</span>
+              <span id="compNewSize">--</span>
+            </div>
+            <video id="playerCompressed" controls playsinline webkit-playsinline></video>
+          </div>
+          <div class="video-card" id="cardOriginal">
+            <div class="video-card-header">
+              <span>Original Video</span>
+              <span id="compOrigSize">--</span>
+            </div>
+            <video id="playerOriginal" controls playsinline webkit-playsinline></video>
+          </div>
+        </div>
+
+        <div class="results-action-row" style="display: flex; gap: 12px; flex-wrap: wrap;">
+          <button id="shareBtn" class="btn btn-share hidden" style="flex: 1;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <circle cx="18" cy="5" r="3"></circle>
+              <circle cx="6" cy="12" r="3"></circle>
+              <circle cx="18" cy="19" r="3"></circle>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+            </svg>
+            Save to Photos / Share
+          </button>
+
+          <a id="downloadBtn" class="btn btn-primary" style="flex: 2;" href="#" download>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Download Video
+          </a>
+
+          <button class="btn btn-secondary" id="restartBtn" style="flex: 1;">
+            Compress Another
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- STEP 4: RESULTS & COMPARISON -->
-    <div id="resultsSection" class="glass-card hidden">
-      <div class="results-hero">
-        <div class="savings-badge" id="savingsBadge">
-          🎉 Reduced by 74.2% (38.4 MB Saved)
+    <!-- ============================================================== -->
+    <!-- VIEW 2: WORD TO PDF CONVERTER TOOL                             -->
+    <!-- ============================================================== -->
+    <div id="wordToPdfToolView" class="hidden">
+      <!-- Upload Dropzone -->
+      <div id="wordUploadSection" class="glass-card">
+        <div class="dropzone dropzone-word" id="wordDropzone">
+          <div class="dropzone-icon icon-word">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+          </div>
+          <h3 class="desktop-only-text">Drop your Word document (.docx) here, or browse</h3>
+          <h3 class="mobile-only-text">📱 Tap to select Word (.docx) file</h3>
+          <p class="desktop-only-text">Converts Microsoft Word documents to clean, print-ready PDF with exact tables & typography</p>
+          <p class="mobile-only-text">Select .docx or .doc from Files or Cloud</p>
+          
+          <div class="dropzone-mobile-chips">
+            <span class="mobile-chip chip-word">⚡ High-Fidelity PDF</span>
+            <span class="mobile-chip chip-word">📑 Tables & Styles Preserved</span>
+            <span class="mobile-chip chip-word">🔒 100% Private</span>
+          </div>
+
+          <input type="file" id="wordFileInput" accept=".docx,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword">
         </div>
-        <p style="color: var(--text-muted); font-size: 14px;">Optimized and packaged by GT INNOX.</p>
       </div>
 
-      <div class="comparison-grid">
-        <div class="video-card">
-          <div class="video-card-header">
-            <span>Original Video</span>
-            <span id="compOrigSize">--</span>
-          </div>
-          <video id="playerOriginal" controls></video>
-        </div>
-        <div class="video-card">
-          <div class="video-card-header" style="color: var(--gt-cyan);">
-            <span>GT INNOX Compressed</span>
-            <span id="compNewSize">--</span>
-          </div>
-          <video id="playerCompressed" controls></video>
+      <!-- Processing state -->
+      <div id="wordProgressSection" class="glass-card hidden">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 14px; padding: 24px 0;">
+          <div class="spinner" style="border-left-color: #38bdf8; width: 28px; height: 28px;"></div>
+          <span style="font-weight: 700; font-size: 16px; color: #38bdf8;">Converting Word to PDF...</span>
         </div>
       </div>
 
-      <div class="results-action-row" style="display: flex; gap: 12px;">
-        <a id="downloadBtn" class="btn btn-primary" style="flex: 2;" href="#" download>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="7 10 12 15 17 10"></polyline>
-            <line x1="12" y1="15" x2="12" y2="3"></line>
-          </svg>
-          Download Compressed Video
-        </a>
-        <button class="btn btn-secondary" id="restartBtn" style="flex: 1;">
-          Compress Another
-        </button>
+      <!-- Result state -->
+      <div id="wordResultSection" class="glass-card hidden">
+        <div class="results-hero">
+          <div class="savings-badge badge-word" id="wordSuccessBadge">
+            🎉 Word Document Converted to PDF!
+          </div>
+          <p style="color: var(--text-muted); font-size: 14px;" id="wordResultSummary">Formatted and ready for download.</p>
+        </div>
+
+        <div class="doc-info-grid" style="margin-bottom: 24px;">
+          <div class="info-pill">
+            <div class="info-pill-label">Original Word File</div>
+            <div class="info-pill-val" id="wordInfoOrigSize">--</div>
+          </div>
+          <div class="info-pill">
+            <div class="info-pill-label">Converted PDF Size</div>
+            <div class="info-pill-val" id="wordInfoPdfSize" style="color: #38bdf8;">--</div>
+          </div>
+          <div class="info-pill">
+            <div class="info-pill-label">Page Count</div>
+            <div class="info-pill-val" id="wordInfoPages">--</div>
+          </div>
+          <div class="info-pill">
+            <div class="info-pill-label">Conversion Speed</div>
+            <div class="info-pill-val" id="wordInfoTime">--</div>
+          </div>
+        </div>
+
+        <div class="results-action-row" style="display: flex; gap: 12px; flex-wrap: wrap;">
+          <button id="wordShareBtn" class="btn btn-share hidden" style="flex: 1;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <circle cx="18" cy="5" r="3"></circle>
+              <circle cx="6" cy="12" r="3"></circle>
+              <circle cx="18" cy="19" r="3"></circle>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+            </svg>
+            Share / Save PDF
+          </button>
+
+          <a id="wordDownloadBtn" class="btn btn-primary" style="flex: 2; background: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%);" href="#" download>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Download PDF
+          </a>
+
+          <button class="btn btn-secondary" id="wordRestartBtn" style="flex: 1;">
+            Convert Another
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- VIEW 3: PDF TO WORD CONVERTER TOOL                             -->
+    <!-- ============================================================== -->
+    <div id="pdfToWordToolView" class="hidden">
+      <!-- Upload Dropzone -->
+      <div id="pdfUploadSection" class="glass-card">
+        <div class="dropzone dropzone-pdf" id="pdfDropzone">
+          <div class="dropzone-icon icon-pdf">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <path d="M12 18v-6"></path>
+              <path d="m9 15 3 3 3-3"></path>
+            </svg>
+          </div>
+          <h3 class="desktop-only-text">Drop your PDF document here, or browse</h3>
+          <h3 class="mobile-only-text">📱 Tap to select PDF file</h3>
+          <p class="desktop-only-text">Extracts PDF text, headings, layout, images, and tables into an editable Microsoft Word (.docx) document</p>
+          <p class="mobile-only-text">Select .pdf from Files or Cloud</p>
+          
+          <div class="dropzone-mobile-chips">
+            <span class="mobile-chip chip-pdf">⚡ 100% Editable Word</span>
+            <span class="mobile-chip chip-pdf">📊 Smart Table Extraction</span>
+            <span class="mobile-chip chip-pdf">🔒 100% Private</span>
+          </div>
+
+          <input type="file" id="pdfFileInput" accept=".pdf,application/pdf">
+        </div>
+      </div>
+
+      <!-- Processing state -->
+      <div id="pdfProgressSection" class="glass-card hidden">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 14px; padding: 24px 0;">
+          <div class="spinner" style="border-left-color: #fb7185; width: 28px; height: 28px;"></div>
+          <span style="font-weight: 700; font-size: 16px; color: #fb7185;">Extracting Text, Layout & Tables to Word (.docx)...</span>
+        </div>
+      </div>
+
+      <!-- Result state -->
+      <div id="pdfResultSection" class="glass-card hidden">
+        <div class="results-hero">
+          <div class="savings-badge badge-pdf" id="pdfSuccessBadge">
+            🎉 PDF Converted to Editable Word (.docx)!
+          </div>
+          <p style="color: var(--text-muted); font-size: 14px;" id="pdfResultSummary">Formatted and ready for Microsoft Word.</p>
+        </div>
+
+        <div class="doc-info-grid" style="margin-bottom: 24px;">
+          <div class="info-pill">
+            <div class="info-pill-label">Original PDF Size</div>
+            <div class="info-pill-val" id="pdfInfoOrigSize">--</div>
+          </div>
+          <div class="info-pill">
+            <div class="info-pill-label">Converted Word Size</div>
+            <div class="info-pill-val" id="pdfInfoDocxSize" style="color: #fb7185;">--</div>
+          </div>
+          <div class="info-pill">
+            <div class="info-pill-label">Page Count</div>
+            <div class="info-pill-val" id="pdfInfoPages">--</div>
+          </div>
+          <div class="info-pill">
+            <div class="info-pill-label">Conversion Speed</div>
+            <div class="info-pill-val" id="pdfInfoTime">--</div>
+          </div>
+        </div>
+
+        <div class="results-action-row" style="display: flex; gap: 12px; flex-wrap: wrap;">
+          <button id="pdfShareBtn" class="btn btn-share hidden" style="flex: 1;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <circle cx="18" cy="5" r="3"></circle>
+              <circle cx="6" cy="12" r="3"></circle>
+              <circle cx="18" cy="19" r="3"></circle>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+            </svg>
+            Share / Save Docx
+          </button>
+
+          <a id="pdfDownloadBtn" class="btn btn-primary" style="flex: 2; background: linear-gradient(135deg, #e11d48 0%, #fb7185 100%);" href="#" download>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Download Word (.docx)
+          </a>
+
+          <button class="btn btn-secondary" id="pdfRestartBtn" style="flex: 1;">
+            Convert Another
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1329,19 +1991,73 @@ INDEX_HTML = """<!DOCTYPE html>
     </div>
     <p>Open Source Software under MIT License. Production-ready for GitHub & Vercel.</p>
     <div class="footer-links">
-      <a href="https://github.com/tejasrmap/gt-innox-video-compressor" target="_blank">GitHub Repository</a>
+      <a href="https://github.com/tejasrmap/gt-innox-video-compressor" target="_blank" rel="noopener">GitHub Repository</a>
       <span>•</span>
-      <a href="https://vercel.com" target="_blank">Deploy on Vercel</a>
+      <a href="https://vercel.com" target="_blank" rel="noopener">Deploy on Vercel</a>
     </div>
   </footer>
 
   <script>
+    // Haptic feedback helper for mobile
+    function triggerHaptic(duration = 10) {
+      if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+        try { window.navigator.vibrate(duration); } catch (e) {}
+      }
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // =========================================================================
+    // STUDIO TOOL SWITCHER LOGIC
+    // =========================================================================
+    const studioTabs = document.querySelectorAll('.studio-tab-btn');
+    const videoToolView = document.getElementById('videoToolView');
+    const wordToPdfToolView = document.getElementById('wordToPdfToolView');
+    const pdfToWordToolView = document.getElementById('pdfToWordToolView');
+
+    function switchTool(toolName) {
+      triggerHaptic(8);
+      studioTabs.forEach(tab => {
+        const isMatch = tab.dataset.tool === toolName;
+        tab.classList.toggle('active', isMatch);
+        tab.setAttribute('aria-selected', isMatch);
+      });
+
+      videoToolView.classList.toggle('hidden', toolName !== 'video');
+      wordToPdfToolView.classList.toggle('hidden', toolName !== 'word-to-pdf');
+      pdfToWordToolView.classList.toggle('hidden', toolName !== 'pdf-to-word');
+
+      window.location.hash = toolName;
+    }
+
+    studioTabs.forEach(tab => {
+      tab.addEventListener('click', () => switchTool(tab.dataset.tool));
+    });
+
+    // Check hash on initial load
+    if (window.location.hash) {
+      const hashTool = window.location.hash.replace('#', '');
+      if (['video', 'word-to-pdf', 'pdf-to-word'].includes(hashTool)) {
+        switchTool(hashTool);
+      }
+    }
+
+    // =========================================================================
+    // TOOL 1: VIDEO COMPRESSOR LOGIC
+    // =========================================================================
     let currentTaskId = null;
     let originalFileInfo = null;
     let rawSelectedFile = null;
     let eventSource = null;
     let currentMode = 'crf';
-    let isClientSideProcessing = false;
+    let wakeLock = null;
+    let compressedFileObj = null;
 
     const dropzone = document.getElementById('dropzone');
     const fileInput = document.getElementById('fileInput');
@@ -1374,11 +2090,19 @@ INDEX_HTML = """<!DOCTYPE html>
     const compNewSize = document.getElementById('compNewSize');
     const playerOriginal = document.getElementById('playerOriginal');
     const playerCompressed = document.getElementById('playerCompressed');
+    const cardOriginal = document.getElementById('cardOriginal');
+    const cardCompressed = document.getElementById('cardCompressed');
+    const mobileCompSwitch = document.getElementById('mobileCompSwitch');
     const downloadBtn = document.getElementById('downloadBtn');
+    const shareBtn = document.getElementById('shareBtn');
     const restartBtn = document.getElementById('restartBtn');
     const changeFileBtn = document.getElementById('changeFileBtn');
 
-    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('click', () => {
+      triggerHaptic(12);
+      fileInput.click();
+    });
+
     dropzone.addEventListener('dragover', (e) => {
       e.preventDefault();
       dropzone.classList.add('dragover');
@@ -1387,7 +2111,7 @@ INDEX_HTML = """<!DOCTYPE html>
     dropzone.addEventListener('drop', (e) => {
       e.preventDefault();
       dropzone.classList.remove('dragover');
-      if (e.dataTransfer.files.length > 0) {
+      if (e.dataTransfer && e.dataTransfer.files.length > 0) {
         handleUpload(e.dataTransfer.files[0]);
       }
     });
@@ -1397,20 +2121,11 @@ INDEX_HTML = """<!DOCTYPE html>
       }
     });
 
-    function formatBytes(bytes) {
-      if (bytes === 0) return '0 B';
-      const k = 1024;
-      const sizes = ['B', 'KB', 'MB', 'GB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }
-
     function handleUpload(file) {
       if (!file) return;
       rawSelectedFile = file;
-      dropzone.innerHTML = `<div class="spinner" style="margin-bottom: 12px;"></div><h3>Analyzing ${file.name}...</h3>`;
+      dropzone.innerHTML = `<div class="spinner" style="margin-bottom: 12px;"></div><h3>Analyzing ${file.name}...</h3><p style="color: var(--text-muted); font-size: 13px; margin-top: 6px;">Preparing on-device optimizer...</p>`;
 
-      // Instant client-side metadata analysis (Zero network upload delay)
       const videoUrl = URL.createObjectURL(file);
       const tempVideo = document.createElement('video');
       tempVideo.preload = 'metadata';
@@ -1420,14 +2135,9 @@ INDEX_HTML = """<!DOCTYPE html>
       tempVideo.setAttribute('webkit-playsinline', '');
       tempVideo.src = videoUrl;
 
-      // Timeout safety so user is never stuck
       const timeoutFallback = setTimeout(() => {
-        applyMetadata({
-          duration: 30,
-          w: 1920,
-          h: 1080
-        });
-      }, 1200);
+        applyMetadata({ duration: 30, w: 1920, h: 1080 });
+      }, 1500);
 
       tempVideo.onloadedmetadata = () => {
         clearTimeout(timeoutFallback);
@@ -1440,11 +2150,7 @@ INDEX_HTML = """<!DOCTYPE html>
 
       tempVideo.onerror = () => {
         clearTimeout(timeoutFallback);
-        applyMetadata({
-          duration: 10,
-          w: 1280,
-          h: 720
-        });
+        applyMetadata({ duration: 10, w: 1280, h: 720 });
       };
 
       function applyMetadata(meta) {
@@ -1480,9 +2186,11 @@ INDEX_HTML = """<!DOCTYPE html>
 
       uploadSection.classList.add('hidden');
       configSection.classList.remove('hidden');
+      configSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     tabCrf.addEventListener('click', () => {
+      triggerHaptic(8);
       currentMode = 'crf';
       tabCrf.classList.add('active');
       tabTarget.classList.remove('active');
@@ -1491,6 +2199,7 @@ INDEX_HTML = """<!DOCTYPE html>
     });
 
     tabTarget.addEventListener('click', () => {
+      triggerHaptic(8);
       currentMode = 'target_size';
       tabTarget.classList.add('active');
       tabCrf.classList.remove('active');
@@ -1515,6 +2224,7 @@ INDEX_HTML = """<!DOCTYPE html>
 
     document.querySelectorAll('.preset-card').forEach(card => {
       card.addEventListener('click', () => {
+        triggerHaptic(10);
         document.querySelectorAll('.preset-card').forEach(c => c.classList.remove('active'));
         card.classList.add('active');
         const p = card.dataset.preset;
@@ -1558,9 +2268,55 @@ INDEX_HTML = """<!DOCTYPE html>
       });
     });
 
+    function applyMobileView(view) {
+      if (!cardOriginal || !cardCompressed) return;
+      document.querySelectorAll('.mobile-comp-tab').forEach(t => t.classList.remove('active'));
+      const activeTab = document.querySelector(`.mobile-comp-tab[data-view="${view}"]`);
+      if (activeTab) activeTab.classList.add('active');
+
+      if (window.innerWidth <= 768) {
+        if (view === 'compressed') {
+          cardCompressed.style.display = 'block';
+          cardOriginal.style.display = 'none';
+        } else if (view === 'original') {
+          cardCompressed.style.display = 'none';
+          cardOriginal.style.display = 'block';
+        } else {
+          cardCompressed.style.display = 'block';
+          cardOriginal.style.display = 'block';
+        }
+      } else {
+        cardCompressed.style.display = 'block';
+        cardOriginal.style.display = 'block';
+      }
+    }
+
+    document.querySelectorAll('.mobile-comp-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        triggerHaptic(8);
+        applyMobileView(tab.dataset.view);
+      });
+    });
+
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 768) {
+        if (cardOriginal) cardOriginal.style.display = 'block';
+        if (cardCompressed) cardCompressed.style.display = 'block';
+      } else {
+        const activeTab = document.querySelector('.mobile-comp-tab.active');
+        applyMobileView(activeTab ? activeTab.dataset.view : 'compressed');
+      }
+    });
+
     startCompressBtn.addEventListener('click', async () => {
+      triggerHaptic(15);
       configSection.classList.add('hidden');
       progressSection.classList.remove('hidden');
+      progressSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      if ('wakeLock' in navigator) {
+        try { wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+      }
 
       const isLocalServer = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') && !location.hostname.includes('vercel');
 
@@ -1590,7 +2346,6 @@ INDEX_HTML = """<!DOCTYPE html>
         }
       }
 
-      // In-Browser High-Speed Engine (Optimized for Vercel & Cloud)
       runBrowserCompression();
     });
 
@@ -1617,25 +2372,37 @@ INDEX_HTML = """<!DOCTYPE html>
 
         if (data.status === 'completed') {
           eventSource.close();
+          releaseWakeLock();
           showBackendResults(data.result);
         } else if (data.status === 'failed' || data.status === 'cancelled') {
           eventSource.close();
+          releaseWakeLock();
           alert(data.error || 'Compression halted.');
           location.reload();
         }
       };
 
-      eventSource.onerror = () => eventSource.close();
+      eventSource.onerror = () => {
+        eventSource.close();
+        releaseWakeLock();
+      };
     }
 
-    // High-Performance In-Browser Compression Engine (Zero Server Upload Delay)
+    async function releaseWakeLock() {
+      if (wakeLock) {
+        try { await wakeLock.release(); } catch (e) {}
+        wakeLock = null;
+      }
+    }
+
     async function runBrowserCompression() {
       const video = document.createElement('video');
       video.src = URL.createObjectURL(rawSelectedFile);
-      video.muted = true;
       video.playsInline = true;
       video.setAttribute('playsinline', '');
       video.setAttribute('webkit-playsinline', '');
+      video.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:2px;height:2px;opacity:0.01;pointer-events:none;';
+      document.body.appendChild(video);
 
       await new Promise((res) => {
         video.onloadeddata = res;
@@ -1660,43 +2427,45 @@ INDEX_HTML = """<!DOCTYPE html>
       } else if (scale === '50%') {
         targetW = Math.round(targetW * 0.5);
         targetH = Math.round(targetH * 0.5);
+      } else if (scale === '75%') {
+        targetW = Math.round(targetW * 0.75);
+        targetH = Math.round(targetH * 0.75);
       }
 
-      // Ensure dimensions are even
       targetW = Math.floor(targetW / 2) * 2;
       targetH = Math.floor(targetH / 2) * 2;
 
       const canvas = document.createElement('canvas');
       canvas.width = targetW;
       canvas.height = targetH;
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
 
-      // Web Audio API: Route audio stream directly into MediaRecorder while keeping speakers muted
       let audioTrack = null;
       let audioCtx = null;
       try {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') {
-          await audioCtx.resume();
-        }
-        const source = audioCtx.createMediaElementSource(video);
-        const dest = audioCtx.createMediaStreamDestination();
-        source.connect(dest);
-        // Do NOT connect to audioCtx.destination so the user's speakers remain quiet!
-        const tracks = dest.stream.getAudioTracks();
-        if (tracks.length > 0 && audioSelect.value !== 'mute') {
-          audioTrack = tracks[0];
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) {
+          audioCtx = new AudioContextClass();
+          if (audioCtx.state === 'suspended') {
+            await audioCtx.resume();
+          }
+          const source = audioCtx.createMediaElementSource(video);
+          const dest = audioCtx.createMediaStreamDestination();
+          source.connect(dest);
+          const tracks = dest.stream.getAudioTracks();
+          if (tracks.length > 0 && audioSelect.value !== 'mute') {
+            audioTrack = tracks[0];
+          }
         }
       } catch (e) {
         console.warn('Web Audio capture setup:', e);
       }
 
-      const stream = canvas.captureStream(30);
+      const stream = canvas.captureStream ? canvas.captureStream(30) : canvas.webkitCaptureStream(30);
       if (audioTrack) {
         stream.addTrack(audioTrack);
       }
 
-      // Bitrate calculation
       const dur = video.duration || 10;
       let bitrate = 1500000;
       if (currentMode === 'target_size') {
@@ -1714,6 +2483,9 @@ INDEX_HTML = """<!DOCTYPE html>
       } else if (MediaRecorder.isTypeSupported('video/mp4')) {
         mime = 'video/mp4';
         ext = 'mp4';
+      } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) {
+        mime = 'video/webm;codecs=vp8,opus';
+        ext = 'webm';
       } else if (!MediaRecorder.isTypeSupported(mime)) {
         mime = 'video/webm';
         ext = 'webm';
@@ -1732,18 +2504,24 @@ INDEX_HTML = """<!DOCTYPE html>
       };
 
       recorder.onstop = () => {
+        releaseWakeLock();
+        if (video.parentNode) video.parentNode.removeChild(video);
         if (audioCtx) {
           try { audioCtx.close(); } catch (err) {}
         }
+
         const blob = new Blob(chunks, { type: mime });
         const compUrl = URL.createObjectURL(blob);
         const compBytes = blob.size;
         const origBytes = rawSelectedFile.size;
         const savedBytes = Math.max(0, origBytes - compBytes);
         const savedPct = ((savedBytes / origBytes) * 100).toFixed(1);
+        const filenameClean = rawSelectedFile.name.replace(/\.[^/.]+$/, '');
+        const outputFilename = `${filenameClean}_GT_INNOX_compressed.${ext}`;
 
         progressSection.classList.add('hidden');
         resultsSection.classList.remove('hidden');
+        resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
         savingsBadge.textContent = `🎉 Reduced by ${savedPct}% (${formatBytes(savedBytes)} Saved)`;
         compOrigSize.textContent = formatBytes(origBytes);
@@ -1753,17 +2531,57 @@ INDEX_HTML = """<!DOCTYPE html>
         playerCompressed.src = compUrl;
 
         downloadBtn.href = compUrl;
-        downloadBtn.download = `${rawSelectedFile.name.replace(/\.[^/.]+$/, '')}_GT_INNOX_compressed.${ext}`;
+        downloadBtn.download = outputFilename;
+
+        try {
+          compressedFileObj = new File([blob], outputFilename, { type: mime });
+          if (navigator.canShare && navigator.canShare({ files: [compressedFileObj] })) {
+            shareBtn.classList.remove('hidden');
+            shareBtn.onclick = async () => {
+              triggerHaptic(12);
+              try {
+                await navigator.share({
+                  files: [compressedFileObj],
+                  title: 'GT INNOX Compressed Video',
+                  text: `Compressed with GT INNOX Studio (${savingsBadge.textContent.trim()})`
+                });
+              } catch (shErr) {
+                if (shErr.name !== 'AbortError') console.warn('Share error:', shErr);
+              }
+            };
+          } else {
+            shareBtn.classList.add('hidden');
+          }
+        } catch (fErr) {
+          shareBtn.classList.add('hidden');
+        }
+
+        applyMobileView('compressed');
       };
 
       recorder.start(500);
 
-      const startTime = Date.now();
-      video.muted = false; // Unmuted so audio samples are pumped into Web Audio API
-      video.volume = 1.0;
-      video.playbackRate = 1.0; // Strict 1.0x normal speed: guarantees 100% audio sync and normal playback
-      await video.play();
+      video.playbackRate = 1.0;
+      try {
+        video.muted = false;
+        video.volume = 1.0;
+        await video.play();
+      } catch (playErr) {
+        console.warn('Playback fallback to muted:', playErr);
+        video.muted = true;
+        try {
+          await video.play();
+        } catch (e2) {
+          alert('Could not start video playback on your browser.');
+          progressSection.classList.add('hidden');
+          configSection.classList.remove('hidden');
+          if (video.parentNode) video.parentNode.removeChild(video);
+          releaseWakeLock();
+          return;
+        }
+      }
 
+      const startTime = Date.now();
       video.onended = () => {
         if (recorder.state === 'recording') recorder.stop();
       };
@@ -1787,14 +2605,25 @@ INDEX_HTML = """<!DOCTYPE html>
         const s = Math.floor(eta % 60);
         progressEta.textContent = `ETA: ${m}:${s < 10 ? '0' : ''}${s}`;
 
+        if ('requestVideoFrameCallback' in video) {
+          video.requestVideoFrameCallback(renderFrame);
+        } else {
+          requestAnimationFrame(renderFrame);
+        }
+      }
+
+      if ('requestVideoFrameCallback' in video) {
+        video.requestVideoFrameCallback(renderFrame);
+      } else {
         requestAnimationFrame(renderFrame);
       }
-      renderFrame();
     }
 
     cancelBtn.addEventListener('click', async () => {
+      triggerHaptic(10);
+      releaseWakeLock();
       if (currentTaskId) {
-        await fetch(`/api/cancel/${currentTaskId}`, { method: 'POST' });
+        try { await fetch(`/api/cancel/${currentTaskId}`, { method: 'POST' }); } catch (e) {}
       }
       location.reload();
     });
@@ -1802,6 +2631,7 @@ INDEX_HTML = """<!DOCTYPE html>
     function showBackendResults(result) {
       progressSection.classList.add('hidden');
       resultsSection.classList.remove('hidden');
+      resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
       savingsBadge.textContent = `🎉 Reduced by ${result.saved_percent}% (${result.saved_bytes_formatted} Saved)`;
       compOrigSize.textContent = originalFileInfo.size_formatted;
@@ -1812,14 +2642,241 @@ INDEX_HTML = """<!DOCTYPE html>
 
       downloadBtn.href = `/api/download/${currentTaskId}`;
       downloadBtn.download = `${originalFileInfo.filename.replace(/\.[^/.]+$/, '')}_GT_INNOX_compressed.mp4`;
+
+      applyMobileView('compressed');
     }
 
-    restartBtn.addEventListener('click', () => location.reload());
-    changeFileBtn.addEventListener('click', () => location.reload());
+    restartBtn.addEventListener('click', () => { triggerHaptic(8); location.reload(); });
+    changeFileBtn.addEventListener('click', () => { triggerHaptic(8); location.reload(); });
+
+    // =========================================================================
+    // TOOL 2: WORD TO PDF CONVERTER LOGIC
+    // =========================================================================
+    const wordDropzone = document.getElementById('wordDropzone');
+    const wordFileInput = document.getElementById('wordFileInput');
+    const wordUploadSection = document.getElementById('wordUploadSection');
+    const wordProgressSection = document.getElementById('wordProgressSection');
+    const wordResultSection = document.getElementById('wordResultSection');
+    const wordDownloadBtn = document.getElementById('wordDownloadBtn');
+    const wordShareBtn = document.getElementById('wordShareBtn');
+    const wordRestartBtn = document.getElementById('wordRestartBtn');
+
+    wordDropzone.addEventListener('click', () => {
+      triggerHaptic(12);
+      wordFileInput.click();
+    });
+
+    wordDropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      wordDropzone.classList.add('dragover');
+    });
+    wordDropzone.addEventListener('dragleave', () => wordDropzone.classList.remove('dragover'));
+    wordDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      wordDropzone.classList.remove('dragover');
+      if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+        handleWordUpload(e.dataTransfer.files[0]);
+      }
+    });
+    wordFileInput.addEventListener('change', () => {
+      if (wordFileInput.files.length > 0) {
+        handleWordUpload(wordFileInput.files[0]);
+      }
+    });
+
+    async function handleWordUpload(file) {
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith('.docx') && !file.name.toLowerCase().endsWith('.doc')) {
+        alert('Please select a valid Word document (.docx or .doc).');
+        return;
+      }
+
+      wordUploadSection.classList.add('hidden');
+      wordProgressSection.classList.remove('hidden');
+      wordProgressSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const resp = await fetch('/api/convert/word-to-pdf', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({ detail: 'Conversion failed' }));
+          throw new Error(err.detail || 'Word to PDF conversion failed');
+        }
+
+        const data = await resp.json();
+        wordProgressSection.classList.add('hidden');
+        wordResultSection.classList.remove('hidden');
+        wordResultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        document.getElementById('wordInfoOrigSize').textContent = data.original_size_formatted;
+        document.getElementById('wordInfoPdfSize').textContent = data.converted_size_formatted;
+        document.getElementById('wordInfoPages').textContent = data.page_count + (data.page_count === 1 ? ' Page' : ' Pages');
+        document.getElementById('wordInfoTime').textContent = `${data.time_taken_sec}s`;
+        document.getElementById('wordResultSummary').textContent = `${data.converted_filename} ready for download.`;
+
+        wordDownloadBtn.href = data.download_url;
+        wordDownloadBtn.download = data.converted_filename;
+
+        // Fetch blob for native mobile sharing
+        try {
+          const fileResp = await fetch(data.download_url);
+          const blob = await fileResp.blob();
+          const pdfShareFile = new File([blob], data.converted_filename, { type: 'application/pdf' });
+          if (navigator.canShare && navigator.canShare({ files: [pdfShareFile] })) {
+            wordShareBtn.classList.remove('hidden');
+            wordShareBtn.onclick = async () => {
+              triggerHaptic(12);
+              try {
+                await navigator.share({
+                  files: [pdfShareFile],
+                  title: 'GT INNOX Converted PDF',
+                  text: `Converted with GT INNOX Studio`
+                });
+              } catch (shErr) {
+                if (shErr.name !== 'AbortError') console.warn('Share error:', shErr);
+              }
+            };
+          } else {
+            wordShareBtn.classList.add('hidden');
+          }
+        } catch (e) {
+          wordShareBtn.classList.add('hidden');
+        }
+      } catch (err) {
+        alert(err.message || 'Word to PDF conversion failed. Please try again.');
+        wordProgressSection.classList.add('hidden');
+        wordUploadSection.classList.remove('hidden');
+      }
+    }
+
+    wordRestartBtn.addEventListener('click', () => {
+      triggerHaptic(8);
+      wordFileInput.value = '';
+      wordResultSection.classList.add('hidden');
+      wordUploadSection.classList.remove('hidden');
+    });
+
+    // =========================================================================
+    // TOOL 3: PDF TO WORD CONVERTER LOGIC
+    // =========================================================================
+    const pdfDropzone = document.getElementById('pdfDropzone');
+    const pdfFileInput = document.getElementById('pdfFileInput');
+    const pdfUploadSection = document.getElementById('pdfUploadSection');
+    const pdfProgressSection = document.getElementById('pdfProgressSection');
+    const pdfResultSection = document.getElementById('pdfResultSection');
+    const pdfDownloadBtn = document.getElementById('pdfDownloadBtn');
+    const pdfShareBtn = document.getElementById('pdfShareBtn');
+    const pdfRestartBtn = document.getElementById('pdfRestartBtn');
+
+    pdfDropzone.addEventListener('click', () => {
+      triggerHaptic(12);
+      pdfFileInput.click();
+    });
+
+    pdfDropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      pdfDropzone.classList.add('dragover');
+    });
+    pdfDropzone.addEventListener('dragleave', () => pdfDropzone.classList.remove('dragover'));
+    pdfDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      pdfDropzone.classList.remove('dragover');
+      if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+        handlePdfUpload(e.dataTransfer.files[0]);
+      }
+    });
+    pdfFileInput.addEventListener('change', () => {
+      if (pdfFileInput.files.length > 0) {
+        handlePdfUpload(pdfFileInput.files[0]);
+      }
+    });
+
+    async function handlePdfUpload(file) {
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        alert('Please select a valid PDF document (.pdf).');
+        return;
+      }
+
+      pdfUploadSection.classList.add('hidden');
+      pdfProgressSection.classList.remove('hidden');
+      pdfProgressSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const resp = await fetch('/api/convert/pdf-to-word', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({ detail: 'Conversion failed' }));
+          throw new Error(err.detail || 'PDF to Word conversion failed');
+        }
+
+        const data = await resp.json();
+        pdfProgressSection.classList.add('hidden');
+        pdfResultSection.classList.remove('hidden');
+        pdfResultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        document.getElementById('pdfInfoOrigSize').textContent = data.original_size_formatted;
+        document.getElementById('pdfInfoDocxSize').textContent = data.converted_size_formatted;
+        document.getElementById('pdfInfoPages').textContent = data.page_count + (data.page_count === 1 ? ' Page' : ' Pages');
+        document.getElementById('pdfInfoTime').textContent = `${data.time_taken_sec}s`;
+        document.getElementById('pdfResultSummary').textContent = `${data.converted_filename} ready for download.`;
+
+        pdfDownloadBtn.href = data.download_url;
+        pdfDownloadBtn.download = data.converted_filename;
+
+        // Fetch blob for native mobile sharing
+        try {
+          const fileResp = await fetch(data.download_url);
+          const blob = await fileResp.blob();
+          const docxShareFile = new File([blob], data.converted_filename, { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+          if (navigator.canShare && navigator.canShare({ files: [docxShareFile] })) {
+            pdfShareBtn.classList.remove('hidden');
+            pdfShareBtn.onclick = async () => {
+              triggerHaptic(12);
+              try {
+                await navigator.share({
+                  files: [docxShareFile],
+                  title: 'GT INNOX Converted Word Document',
+                  text: `Converted with GT INNOX Studio`
+                });
+              } catch (shErr) {
+                if (shErr.name !== 'AbortError') console.warn('Share error:', shErr);
+              }
+            };
+          } else {
+            pdfShareBtn.classList.add('hidden');
+          }
+        } catch (e) {
+          pdfShareBtn.classList.add('hidden');
+        }
+      } catch (err) {
+        alert(err.message || 'PDF to Word conversion failed. Please try again.');
+        pdfProgressSection.classList.add('hidden');
+        pdfUploadSection.classList.remove('hidden');
+      }
+    }
+
+    pdfRestartBtn.addEventListener('click', () => {
+      triggerHaptic(8);
+      pdfFileInput.value = '';
+      pdfResultSection.classList.add('hidden');
+      pdfUploadSection.classList.remove('hidden');
+    });
   </script>
 </body>
 </html>
-
 """
 
 @app.get("/", response_class=HTMLResponse)

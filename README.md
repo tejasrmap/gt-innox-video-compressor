@@ -2,11 +2,11 @@
   <img src="static/gt_innox_logo.svg" alt="GT INNOX Logo" width="480"/>
 </p>
 
-<h1 align="center">GT INNOX Video Compressor Studio</h1>
+<h1 align="center">GT INNOX Studio</h1>
 
 <p align="center">
-  <b>Next-generation high-fidelity video compression engine by GT INNOX.</b><br>
-  Compress 4K, 1080p, and high-bitrate videos with zero visible quality loss.
+  <b>Next-generation media & document processing studio by GT INNOX.</b><br>
+  Compress 4K & 1080p videos with zero visible loss + autonomous Word ⇄ PDF converters.
 </p>
 
 <p align="center">
@@ -21,14 +21,15 @@
 
 ## ⚡ Features
 
-- **🌐 Modern Web Studio**: Responsive glassmorphic web application with drag-and-drop, real-time SSE progress, and side-by-side video comparison players.
-- **🖥️ Native Desktop GUI**: Dark-themed standalone desktop application powered by `ttkbootstrap`.
-- **💻 High-Performance CLI**: Terminal interface with real-time ASCII progress bar and batch support.
-- **🎯 Dual Compression Modes**:
-  - **Target File Size**: Guarantee exact file sizes (e.g., Discord 25MB, WhatsApp 16MB).
-  - **Constant Quality (CRF)**: Visually lossless compression (CRF 18–42).
+- **🌐 All-in-One Web Studio**: Responsive glassmorphic studio with drag-and-drop, real-time SSE progress, and segmented tool switcher.
+- **📝 Word to PDF Converter**: Autonomous pure-Python converter transforming `.docx` into print-ready, high-fidelity PDFs with preserved tables, typography, and styles.
+- **📄 PDF to Word Converter**: Smart extractor parsing PDF text, layout, images, and tables into fully editable Microsoft Word (`.docx`) documents.
+- **🎥 High-Fidelity Video Compressor**:
+  - **Dual Compression Modes**: Target File Size (e.g., Discord 25MB, WhatsApp 16MB) & Constant Quality (CRF 18–42).
+  - **Side-by-Side & Segmented Comparison**: Instant visual diffing on mobile and desktop.
+- **📱 100% Mobile Optimized**: Touch-friendly sliders, safe area insets, PWA meta tags, and native Web Share API (`navigator.share`) support to save directly to Photos/Files.
 - **🚀 Hardware Acceleration**: Auto-detects NVIDIA NVENC, Intel QSV, and AMD AMF with seamless CPU fallback.
-- **📦 Zero External Setup**: Includes self-contained FFmpeg binary; no manual system path configuration required.
+- **📦 Zero External Setup**: Autonomous execution with no Microsoft Office licenses or manual system binary configurations needed.
 
 ---
 

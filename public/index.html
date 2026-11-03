@@ -725,6 +725,16 @@
     .badge-pdf { background: rgba(251, 113, 133, 0.15); border-color: rgba(251, 113, 133, 0.35); color: #fb7185; box-shadow: 0 0 20px rgba(251, 113, 133, 0.15); }
     .badge-emerald { background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.35); color: #34d399; box-shadow: 0 0 20px rgba(16, 185, 129, 0.15); }
     .badge-purple { background: rgba(168, 85, 247, 0.15); border-color: rgba(168, 85, 247, 0.35); color: #c084fc; box-shadow: 0 0 20px rgba(168, 85, 247, 0.15); }
+    .badge-amber { background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.35); color: #fbbf24; box-shadow: 0 0 20px rgba(245, 158, 11, 0.15); }
+    .dropzone-amber:hover, .dropzone-amber.dragover { border-color: #f59e0b; background: rgba(245, 158, 11, 0.05); box-shadow: 0 12px 30px rgba(245, 158, 11, 0.15); }
+    .icon-amber { background: rgba(245, 158, 11, 0.12) !important; border: 1px solid rgba(245, 158, 11, 0.3) !important; color: #f59e0b !important; }
+    .chip-amber { color: #f59e0b; background: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.25); }
+    .preset-card-amber.active { border-color: #f59e0b; background: rgba(245, 158, 11, 0.08); box-shadow: 0 0 16px rgba(245, 158, 11, 0.2); }
+    .jpg-preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; max-height: 380px; overflow-y: auto; padding: 4px; }
+    .jpg-preview-card { background: rgba(0, 0, 0, 0.4); border: 1px solid var(--card-border); border-radius: var(--radius-sm); overflow: hidden; text-align: center; }
+    .jpg-preview-card img { width: 100%; height: auto; display: block; border-bottom: 1px solid var(--card-border); cursor: pointer; transition: transform 0.2s; }
+    .jpg-preview-card img:hover { transform: scale(1.02); }
+    .jpg-preview-card-meta { padding: 8px 6px; font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--text-muted); }
 
     .file-chip-list {
       display: flex;
@@ -1043,6 +1053,15 @@
           <line x1="6" y1="9" x2="6" y2="21"></line>
         </svg>
         <span>Merge & Split</span>
+      </button>
+
+      <button class="studio-tab-btn" data-tool="pdf-to-jpg" role="tab" aria-selected="false">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+          <circle cx="8.5" cy="8.5" r="1.5"></circle>
+          <polyline points="21 15 16 10 5 21"></polyline>
+        </svg>
+        <span>PDF to JPG</span>
       </button>
 
       <button class="studio-tab-btn" data-tool="word-to-pdf" role="tab" aria-selected="false">
@@ -1674,7 +1693,149 @@
     </div>
 
     <!-- ============================================================== -->
-    <!-- VIEW 4: WORD TO PDF CONVERTER TOOL                             -->
+
+    <!-- ============================================================== -->
+    <!-- VIEW: PDF TO JPG CONVERTER TOOL                                -->
+    <!-- ============================================================== -->
+    <div id="pdfToJpgToolView" class="hidden">
+      <div id="pdfToJpgUploadSection" class="glass-card">
+        <div class="dropzone dropzone-amber" id="pdfToJpgDropzone">
+          <div class="dropzone-icon icon-amber">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+              <polyline points="21 15 16 10 5 21"></polyline>
+            </svg>
+          </div>
+          <h3 class="desktop-only-text">Drop your PDF document here to convert to JPG</h3>
+          <h3 class="mobile-only-text">📱 Tap to select PDF file</h3>
+          <p class="desktop-only-text">Render PDF pages into high-resolution JPG images with instant visual gallery preview</p>
+          <p class="mobile-only-text">Convert PDF pages into high-res JPG images</p>
+          
+          <div class="dropzone-mobile-chips">
+            <span class="mobile-chip chip-amber">🖼️ High-Res JPEG</span>
+            <span class="mobile-chip chip-amber">⚡ Multi-Page Gallery</span>
+            <span class="mobile-chip chip-amber">🔒 100% Private</span>
+          </div>
+
+          <input type="file" id="pdfToJpgFileInput" accept=".pdf,application/pdf">
+        </div>
+      </div>
+
+      <!-- Config & DPI state -->
+      <div id="pdfToJpgConfigSection" class="glass-card hidden">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 8px;">
+          <h3 id="pdfToJpgTitle" style="font-size: 17px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">document.pdf</h3>
+          <button class="btn btn-secondary" id="changePdfToJpgBtn" style="padding: 6px 12px; font-size: 12px; white-space: nowrap; flex-shrink: 0;">Change PDF</button>
+        </div>
+
+        <div class="doc-info-grid">
+          <div class="info-pill">
+            <div class="info-pill-label">Original PDF Size</div>
+            <div class="info-pill-val" id="pdfToJpgOrigSizeVal">--</div>
+          </div>
+          <div class="info-pill">
+            <div class="info-pill-label">Target Format</div>
+            <div class="info-pill-val" style="color: #f59e0b;">JPEG (.jpg)</div>
+          </div>
+        </div>
+
+        <div style="margin: 20px 0 16px;">
+          <label class="control-label" style="display: block; margin-bottom: 8px;">Rendering Resolution (DPI)</label>
+          <div class="presets-row">
+            <div class="preset-card preset-card-amber active" data-jpg-dpi="150">
+              <div class="preset-title">⚡ Standard (150 DPI)</div>
+              <div class="preset-desc">Fast, sharp, balanced for web & mobile</div>
+            </div>
+            <div class="preset-card preset-card-amber" data-jpg-dpi="300">
+              <div class="preset-title">💎 Ultra HD (300 DPI)</div>
+              <div class="preset-desc">Print-quality, ultra-crisp resolution</div>
+            </div>
+            <div class="preset-card preset-card-amber" data-jpg-dpi="96">
+              <div class="preset-title">📱 Compact (96 DPI)</div>
+              <div class="preset-desc">Lightweight file size, fast sharing</div>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="startPdfToJpgBtn" style="background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <polyline points="21 15 16 10 5 21"></polyline>
+          </svg>
+          Convert PDF to JPG Images
+        </button>
+      </div>
+
+      <!-- Processing state -->
+      <div id="pdfToJpgProgressSection" class="glass-card hidden">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 14px; padding: 24px 0;">
+          <div class="spinner" style="border-left-color: #f59e0b; width: 28px; height: 28px;"></div>
+          <span style="font-weight: 700; font-size: 16px; color: #f59e0b;">Rendering PDF Pages to JPG Images...</span>
+        </div>
+      </div>
+
+      <!-- Result state -->
+      <div id="pdfToJpgResultSection" class="glass-card hidden">
+        <div class="results-hero">
+          <div class="savings-badge badge-amber" id="pdfToJpgSuccessBadge">
+            🎉 PDF Converted to High-Res JPG Images!
+          </div>
+          <p style="color: var(--text-muted); font-size: 14px;" id="pdfToJpgResultSummary">All pages rendered and ready for download.</p>
+        </div>
+
+        <div class="doc-info-grid" style="margin-bottom: 20px;">
+          <div class="info-pill">
+            <div class="info-pill-label">Total Pages</div>
+            <div class="info-pill-val" id="pdfToJpgResPageCount" style="color: #f59e0b;">--</div>
+          </div>
+          <div class="info-pill">
+            <div class="info-pill-label">Original PDF Size</div>
+            <div class="info-pill-val" id="pdfToJpgResOrigSize">--</div>
+          </div>
+          <div class="info-pill">
+            <div class="info-pill-label">Images Package Size</div>
+            <div class="info-pill-val" id="pdfToJpgResNewSize">--</div>
+          </div>
+          <div class="info-pill">
+            <div class="info-pill-label">Time Taken</div>
+            <div class="info-pill-val" id="pdfToJpgResTime">--</div>
+          </div>
+        </div>
+
+        <!-- Visual Page Thumbnails Gallery -->
+        <label class="control-label" style="display: block; margin-bottom: 10px;">Rendered Page Gallery (Tap any image to open)</label>
+        <div class="jpg-preview-grid" id="pdfToJpgGallery"></div>
+
+        <div class="results-action-row" style="display: flex; gap: 12px; flex-wrap: wrap;">
+          <button id="pdfToJpgShareBtn" class="btn btn-share hidden" style="flex: 1;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <circle cx="18" cy="5" r="3"></circle>
+              <circle cx="6" cy="12" r="3"></circle>
+              <circle cx="18" cy="19" r="3"></circle>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+            </svg>
+            Share Images
+          </button>
+
+          <a id="pdfToJpgDownloadBtn" class="btn btn-primary" style="flex: 2; background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);" href="#" download>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Download All (ZIP)
+          </a>
+
+          <button class="btn btn-secondary" id="pdfToJpgRestartBtn" style="flex: 1;">
+            Convert Another PDF
+          </button>
+        </div>
+      </div>
+    </div>
+
+        <!-- VIEW 4: WORD TO PDF CONVERTER TOOL                             -->
     <!-- ============================================================== -->
     <div id="wordToPdfToolView" class="hidden">
       <div id="wordUploadSection" class="glass-card">
@@ -1897,6 +2058,7 @@
       'video': document.getElementById('videoToolView'),
       'pdf-compress': document.getElementById('pdfCompressToolView'),
       'pdf-merge-split': document.getElementById('pdfMergeSplitToolView'),
+      'pdf-to-jpg': document.getElementById('pdfToJpgToolView'),
       'word-to-pdf': document.getElementById('wordToPdfToolView'),
       'pdf-to-word': document.getElementById('pdfToWordToolView')
     };
@@ -2847,7 +3009,153 @@
     });
 
     // =========================================================================
-    // TOOL 4: WORD TO PDF CONVERTER LOGIC
+// =========================================================================
+    // TOOL: PDF TO JPG CONVERTER LOGIC
+    // =========================================================================
+    let rawPdfToJpgFile = null;
+    let currentJpgDpi = 150;
+
+    const pdfToJpgDropzone = document.getElementById('pdfToJpgDropzone');
+    const pdfToJpgFileInput = document.getElementById('pdfToJpgFileInput');
+    const pdfToJpgUploadSection = document.getElementById('pdfToJpgUploadSection');
+    const pdfToJpgConfigSection = document.getElementById('pdfToJpgConfigSection');
+    const pdfToJpgProgressSection = document.getElementById('pdfToJpgProgressSection');
+    const pdfToJpgResultSection = document.getElementById('pdfToJpgResultSection');
+    const pdfToJpgGallery = document.getElementById('pdfToJpgGallery');
+    const startPdfToJpgBtn = document.getElementById('startPdfToJpgBtn');
+    const pdfToJpgDownloadBtn = document.getElementById('pdfToJpgDownloadBtn');
+    const pdfToJpgShareBtn = document.getElementById('pdfToJpgShareBtn');
+    const pdfToJpgRestartBtn = document.getElementById('pdfToJpgRestartBtn');
+    const changePdfToJpgBtn = document.getElementById('changePdfToJpgBtn');
+
+    pdfToJpgDropzone.addEventListener('click', () => { triggerHaptic(12); pdfToJpgFileInput.click(); });
+    pdfToJpgDropzone.addEventListener('dragover', (e) => { e.preventDefault(); pdfToJpgDropzone.classList.add('dragover'); });
+    pdfToJpgDropzone.addEventListener('dragleave', () => pdfToJpgDropzone.classList.remove('dragover'));
+    pdfToJpgDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      pdfToJpgDropzone.classList.remove('dragover');
+      if (e.dataTransfer && e.dataTransfer.files.length > 0) handlePdfToJpgSelect(e.dataTransfer.files[0]);
+    });
+    pdfToJpgFileInput.addEventListener('change', () => {
+      if (pdfToJpgFileInput.files.length > 0) handlePdfToJpgSelect(pdfToJpgFileInput.files[0]);
+    });
+
+    function handlePdfToJpgSelect(file) {
+      if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
+        alert('Please select a valid PDF file (.pdf).');
+        return;
+      }
+      rawPdfToJpgFile = file;
+      document.getElementById('pdfToJpgTitle').textContent = file.name;
+      document.getElementById('pdfToJpgOrigSizeVal').textContent = formatBytes(file.size);
+
+      pdfToJpgUploadSection.classList.add('hidden');
+      pdfToJpgConfigSection.classList.remove('hidden');
+      pdfToJpgConfigSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    document.querySelectorAll('[data-jpg-dpi]').forEach(card => {
+      card.addEventListener('click', () => {
+        triggerHaptic(10);
+        document.querySelectorAll('[data-jpg-dpi]').forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+        currentJpgDpi = parseInt(card.dataset.jpgDpi) || 150;
+      });
+    });
+
+    changePdfToJpgBtn.addEventListener('click', () => {
+      pdfToJpgFileInput.value = '';
+      pdfToJpgConfigSection.classList.add('hidden');
+      pdfToJpgUploadSection.classList.remove('hidden');
+    });
+
+    startPdfToJpgBtn.addEventListener('click', async () => {
+      if (!rawPdfToJpgFile) return;
+      triggerHaptic(15);
+      pdfToJpgConfigSection.classList.add('hidden');
+      pdfToJpgProgressSection.classList.remove('hidden');
+      pdfToJpgProgressSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      try {
+        const formData = new FormData();
+        formData.append('file', rawPdfToJpgFile);
+        formData.append('dpi', currentJpgDpi);
+
+        const resp = await fetch('/api/pdf/to-jpg', { method: 'POST', body: formData });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({ detail: 'Conversion failed' }));
+          throw new Error(err.detail || 'PDF to JPG conversion failed');
+        }
+
+        const data = await resp.json();
+        pdfToJpgProgressSection.classList.add('hidden');
+        pdfToJpgResultSection.classList.remove('hidden');
+        pdfToJpgResultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        document.getElementById('pdfToJpgSuccessBadge').textContent = `🎉 Converted ${data.page_count} ${data.page_count === 1 ? 'Page' : 'Pages'} to JPG!`;
+        document.getElementById('pdfToJpgResPageCount').textContent = `${data.page_count} Pages`;
+        document.getElementById('pdfToJpgResOrigSize').textContent = data.original_size_formatted;
+        document.getElementById('pdfToJpgResNewSize').textContent = data.converted_size_formatted;
+        document.getElementById('pdfToJpgResTime').textContent = `${data.time_taken_sec}s`;
+        document.getElementById('pdfToJpgResultSummary').textContent = `${data.converted_filename} ready for download.`;
+
+        pdfToJpgDownloadBtn.href = data.download_url;
+        pdfToJpgDownloadBtn.download = data.converted_filename;
+        pdfToJpgDownloadBtn.innerHTML = `
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          ${data.is_zip ? 'Download All Pages (ZIP)' : 'Download JPG Image'}
+        `;
+
+        // Render preview thumbnails
+        pdfToJpgGallery.innerHTML = (data.pages_info || []).map(p => `
+          <div class="jpg-preview-card">
+            <a href="${p.thumbnail_url}" target="_blank" title="View Full Page ${p.page}">
+              <img src="${p.thumbnail_url}" alt="Page ${p.page}" loading="lazy" />
+            </a>
+            <div class="jpg-preview-card-meta">
+              Page ${p.page} • ${p.size_formatted}
+            </div>
+          </div>
+        `).join('');
+
+        try {
+          const fileResp = await fetch(data.download_url);
+          const blob = await fileResp.blob();
+          const shareFile = new File([blob], data.converted_filename, { type: data.media_type });
+          if (navigator.canShare && navigator.canShare({ files: [shareFile] })) {
+            pdfToJpgShareBtn.classList.remove('hidden');
+            pdfToJpgShareBtn.onclick = async () => {
+              triggerHaptic(12);
+              try {
+                await navigator.share({
+                  files: [shareFile],
+                  title: 'GT INNOX Converted JPGs',
+                  text: `Converted with GT INNOX Studio`
+                });
+              } catch (shErr) { if (shErr.name !== 'AbortError') console.warn(shErr); }
+            };
+          } else { pdfToJpgShareBtn.classList.add('hidden'); }
+        } catch (e) { pdfToJpgShareBtn.classList.add('hidden'); }
+      } catch (err) {
+        alert(err.message || 'PDF to JPG conversion failed.');
+        pdfToJpgProgressSection.classList.add('hidden');
+        pdfToJpgConfigSection.classList.remove('hidden');
+      }
+    });
+
+    pdfToJpgRestartBtn.addEventListener('click', () => {
+      triggerHaptic(8);
+      pdfToJpgFileInput.value = '';
+      rawPdfToJpgFile = null;
+      pdfToJpgResultSection.classList.add('hidden');
+      pdfToJpgUploadSection.classList.remove('hidden');
+    });
+
+    // TOOL 5: WORD TO PDF CONVERTER LOGIC
     // =========================================================================
     const wordDropzone = document.getElementById('wordDropzone');
     const wordFileInput = document.getElementById('wordFileInput');

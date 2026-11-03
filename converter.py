@@ -11,6 +11,7 @@ import re
 import html
 import base64
 import time
+import zipfile
 import docx
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -638,5 +639,80 @@ def split_pdf(pdf_source, page_range_str: str = "1", output_pdf_path: str = None
         "split_size_formatted": format_file_size(len(split_bytes)),
         "time_taken_sec": duration,
     }
+
+
+def pdf_to_jpg(pdf_source, dpi: int = 150, output_path: str = None) -> dict:
+    """
+    Converts a PDF document into high-resolution JPG images.
+    If 1 page, produces a .jpg file. If multi-page, bundles them into a .zip archive.
+    Returns metadata including base64 thumbnails for previewing each page.
+    """
+    start_time = time.time()
+
+    if isinstance(pdf_source, bytes):
+        orig_bytes = pdf_source
+        doc = fitz.open("pdf", orig_bytes)
+    elif hasattr(pdf_source, "read"):
+        orig_bytes = pdf_source.read()
+        doc = fitz.open("pdf", orig_bytes)
+    else:
+        with open(pdf_source, "rb") as f:
+            orig_bytes = f.read()
+        doc = fitz.open(pdf_source)
+
+    page_count = len(doc)
+    page_images = []
+    thumbnails_b64 = []
+
+    for page_idx, page in enumerate(doc):
+        # Render high-res image
+        pix = page.get_pixmap(dpi=dpi)
+        jpg_data = pix.tobytes("jpeg")
+        filename = f"page_{page_idx + 1}.jpg"
+        page_images.append((filename, jpg_data))
+
+        # Lightweight thumbnail for visual preview
+        thumb_pix = page.get_pixmap(dpi=72)
+        thumb_b64 = base64.b64encode(thumb_pix.tobytes("jpeg")).decode("utf-8")
+        thumbnails_b64.append({
+            "page": page_idx + 1,
+            "filename": filename,
+            "size_formatted": format_file_size(len(jpg_data)),
+            "thumbnail_url": f"data:image/jpeg;base64,{thumb_b64}",
+        })
+
+    doc.close()
+
+    if page_count == 1:
+        final_bytes = page_images[0][1]
+        media_type = "image/jpeg"
+        is_zip = False
+    else:
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for fname, data in page_images:
+                zf.writestr(fname, data)
+        final_bytes = zip_buf.getvalue()
+        media_type = "application/zip"
+        is_zip = True
+
+    if output_path:
+        with open(output_path, "wb") as f:
+            f.write(final_bytes)
+
+    duration = round(time.time() - start_time, 2)
+    return {
+        "output_bytes": final_bytes,
+        "is_zip": is_zip,
+        "media_type": media_type,
+        "page_count": page_count,
+        "pages_info": thumbnails_b64,
+        "original_size": len(orig_bytes),
+        "original_size_formatted": format_file_size(len(orig_bytes)),
+        "converted_size": len(final_bytes),
+        "converted_size_formatted": format_file_size(len(final_bytes)),
+        "time_taken_sec": duration,
+    }
+
 
 

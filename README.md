@@ -21,7 +21,8 @@
 
 ## ⚡ Features
 
-- **🌐 All-in-One Studio**: Responsive glassmorphic studio with drag-and-drop, real-time SSE progress, and 5-in-1 tool switcher.
+- **🌐 All-in-One Studio**: Responsive glassmorphic studio with drag-and-drop, real-time SSE progress, and 6-in-1 tool switcher.
+- **🖼️ PDF to JPG Converter**: Convert PDF pages into high-resolution JPG images with customizable DPI presets (150 DPI Standard, 300 DPI High-Res Print, 96 DPI Web Compact), visual page gallery preview, single JPG or multi-page ZIP download, and mobile Web Share API.
 - **🗜️ PDF Compressor**: High-ratio PDF reducer with presets (Extreme, Balanced, Lossless) to shrink heavy PDFs by up to 90% for email, portal, and WhatsApp limits.
 - **🔀 PDF Merge & Split**: Combine multiple PDFs into a single file or extract custom page ranges (e.g. `1-3, 5`) with clean ordering.
 - **📝 Word to PDF Converter**: Autonomous pure-Python converter transforming `.docx` into print-ready, high-fidelity PDFs with preserved tables, typography, and styles.

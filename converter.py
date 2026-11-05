@@ -31,109 +31,229 @@ def format_file_size(num_bytes: int) -> str:
     return f"{num_bytes:.1f} TB"
 
 
+import xml.etree.ElementTree as ET
+
+
+def normalize_docx_bytes(file_bytes: bytes) -> bytes:
+    """
+    Normalizes a DOCX file in-memory.
+    If the document was saved as ISO 'Strict Open XML', translates namespace
+    URIs (purl.oclc.org/ooxml) to Transitional (schemas.openxmlformats.org)
+    so python-docx and OpenXML parsers can read it without crashing.
+    """
+    if not file_bytes.startswith(b"PK\x03\x04"):
+        return file_bytes
+
+    try:
+        in_buf = io.BytesIO(file_bytes)
+        out_buf = io.BytesIO()
+        modified = False
+
+        with zipfile.ZipFile(in_buf, "r") as in_zip:
+            with zipfile.ZipFile(out_buf, "w", zipfile.ZIP_DEFLATED) as out_zip:
+                for item in in_zip.infolist():
+                    content = in_zip.read(item.filename)
+                    if item.filename.endswith((".xml", ".rels")):
+                        text = content.decode("utf-8", errors="ignore")
+                        if "purl.oclc.org/ooxml" in text:
+                            text = text.replace(
+                                "http://purl.oclc.org/ooxml/officeDocument/relationships/",
+                                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/"
+                            )
+                            text = text.replace(
+                                "http://purl.oclc.org/ooxml/wordprocessingml/",
+                                "http://schemas.openxmlformats.org/wordprocessingml/2006/"
+                            )
+                            text = text.replace(
+                                "http://purl.oclc.org/ooxml/drawingml/",
+                                "http://schemas.openxmlformats.org/drawingml/2006/"
+                            )
+                            content = text.encode("utf-8")
+                            modified = True
+                    out_zip.writestr(item, content)
+
+        if modified:
+            return out_buf.getvalue()
+    except Exception:
+        pass
+
+    return file_bytes
+
+
+def _fallback_extract_xml_to_html(zip_bytes: bytes) -> list[str]:
+    """
+    Fallback parser: directly extracts paragraphs and tables from word/document.xml
+    when python-docx cannot parse relationships or non-standard package structures.
+    """
+    body_html = []
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as z:
+            doc_xml_name = None
+            for name in z.namelist():
+                if name.endswith("document.xml"):
+                    doc_xml_name = name
+                    break
+            if not doc_xml_name:
+                return body_html
+            xml_content = z.read(doc_xml_name)
+
+        root = ET.fromstring(xml_content)
+        for elem in root.iter():
+            tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+            if tag == "body":
+                for child in elem:
+                    ctag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+                    if ctag == "p":
+                        p_text = "".join(t.text for t in child.iter() if (t.tag.split("}")[-1] if "}" in t.tag else t.tag) == "t" and t.text)
+                        if p_text.strip():
+                            body_html.append(f"<p>{html.escape(p_text.strip())}</p>")
+                    elif ctag == "tbl":
+                        rows_html = []
+                        for row in child:
+                            rtag = row.tag.split("}")[-1] if "}" in row.tag else row.tag
+                            if rtag == "tr":
+                                cells_html = []
+                                for cell in row:
+                                    c_tag = cell.tag.split("}")[-1] if "}" in cell.tag else cell.tag
+                                    if c_tag == "tc":
+                                        c_text = "".join(t.text for t in cell.iter() if (t.tag.split("}")[-1] if "}" in t.tag else t.tag) == "t" and t.text)
+                                        cells_html.append(f"<td>{html.escape(c_text.strip())}</td>")
+                                if cells_html:
+                                    rows_html.append(f"<tr>{''.join(cells_html)}</tr>")
+                        if rows_html:
+                            body_html.append(f"<table>{''.join(rows_html)}</table>")
+    except Exception:
+        pass
+    return body_html
+
+
 def docx_to_html(docx_source) -> str:
     """
     Parses a DOCX document (file path or bytes IO) into clean, modern, styled HTML.
     Extracts text runs, styles, headings, tables, and embedded images.
+    Supports both Transitional and ISO Strict Open XML documents, with direct XML fallback.
     """
     if isinstance(docx_source, bytes):
-        doc = docx.Document(io.BytesIO(docx_source))
+        raw_bytes = docx_source
+    elif hasattr(docx_source, "read"):
+        raw_bytes = docx_source.read()
     else:
-        doc = docx.Document(docx_source)
+        with open(docx_source, "rb") as f:
+            raw_bytes = f.read()
+
+    # Detect legacy Word 97-2003 binary (.doc) files
+    if raw_bytes.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
+        raise ValueError(
+            "This file is a legacy Word 97-2003 binary file (.doc). "
+            "Please open and save it as a modern Word Document (.docx) in Word or Google Docs before converting."
+        )
+
+    # Normalize ISO Strict Open XML namespaces if present
+    normalized_bytes = normalize_docx_bytes(raw_bytes)
 
     body_html = []
-
-    # Map image rIds to base64 data URIs
-    images_map = {}
+    doc = None
     try:
-        for rel in doc.part.rels.values():
-            if "image" in rel.target_ref:
-                image_part = rel.target_part
-                content_type = image_part.content_type
-                img_data = image_part.blob
-                b64 = base64.b64encode(img_data).decode("utf-8")
-                images_map[rel.rId] = f"data:{content_type};base64,{b64}"
+        doc = docx.Document(io.BytesIO(normalized_bytes))
     except Exception:
-        pass
+        # Fallback to direct XML parsing of word/document.xml
+        body_html = _fallback_extract_xml_to_html(normalized_bytes)
+        if not body_html:
+            raise ValueError(
+                "Unable to parse Word document. Please ensure it is a valid, uncorrupted .docx file."
+            )
 
-    # Iterate through block elements in order (paragraphs and tables)
-    for element in doc.element.body:
-        tag_name = element.tag.split("}")[-1] if "}" in element.tag else element.tag
+    if doc is not None:
+        # Map image rIds to base64 data URIs
+        images_map = {}
+        try:
+            for rel in doc.part.rels.values():
+                if "image" in rel.target_ref:
+                    image_part = rel.target_part
+                    content_type = image_part.content_type
+                    img_data = image_part.blob
+                    b64 = base64.b64encode(img_data).decode("utf-8")
+                    images_map[rel.rId] = f"data:{content_type};base64,{b64}"
+        except Exception:
+            pass
 
-        if tag_name == "p":
-            p = docx.text.paragraph.Paragraph(element, doc)
-            text = p.text.strip()
-            style_name = p.style.name.lower() if p.style and p.style.name else ""
+        # Iterate through block elements in order (paragraphs and tables)
+        for element in doc.element.body:
+            tag_name = element.tag.split("}")[-1] if "}" in element.tag else element.tag
 
-            # Check if paragraph has images
-            img_htmls = []
-            for r in p.runs:
-                # Look for drawing/blip in run element
-                blips = r._element.xpath(".//a:blip")
-                for blip in blips:
-                    embed_id = blip.get(
-                        "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed"
-                    )
-                    if embed_id and embed_id in images_map:
-                        img_htmls.append(
-                            f'<div class="doc-image-wrapper"><img src="{images_map[embed_id]}" style="max-width: 100%; height: auto; border-radius: 6px; margin: 10px 0;" /></div>'
+            if tag_name == "p":
+                p = docx.text.paragraph.Paragraph(element, doc)
+                text = p.text.strip()
+                style_name = p.style.name.lower() if p.style and p.style.name else ""
+
+                # Check if paragraph has images
+                img_htmls = []
+                for r in p.runs:
+                    blips = r._element.xpath(".//a:blip")
+                    for blip in blips:
+                        embed_id = blip.get(
+                            "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed"
                         )
+                        if embed_id and embed_id in images_map:
+                            img_htmls.append(
+                                f'<div class="doc-image-wrapper"><img src="{images_map[embed_id]}" style="max-width: 100%; height: auto; border-radius: 6px; margin: 10px 0;" /></div>'
+                            )
 
-            if not text and not img_htmls:
-                continue
-
-            # Process runs with formatting
-            formatted_runs = []
-            for r in p.runs:
-                run_text = html.escape(r.text)
-                if not run_text:
+                if not text and not img_htmls:
                     continue
-                if r.bold:
-                    run_text = f"<b>{run_text}</b>"
-                if r.italic:
-                    run_text = f"<i>{run_text}</i>"
-                if r.underline:
-                    run_text = f"<u>{run_text}</u>"
-                if r.font.color and r.font.color.rgb:
-                    color_hex = f"#{r.font.color.rgb}"
-                    run_text = f'<span style="color: {color_hex};">{run_text}</span>'
-                formatted_runs.append(run_text)
 
-            inner_content = "".join(formatted_runs) + "".join(img_htmls)
+                # Process runs with formatting
+                formatted_runs = []
+                for r in p.runs:
+                    run_text = html.escape(r.text)
+                    if not run_text:
+                        continue
+                    if r.bold:
+                        run_text = f"<b>{run_text}</b>"
+                    if r.italic:
+                        run_text = f"<i>{run_text}</i>"
+                    if r.underline:
+                        run_text = f"<u>{run_text}</u>"
+                    if r.font.color and r.font.color.rgb:
+                        color_hex = f"#{r.font.color.rgb}"
+                        run_text = f'<span style="color: {color_hex};">{run_text}</span>'
+                    formatted_runs.append(run_text)
 
-            # Determine HTML tag based on DOCX style
-            if "heading 1" in style_name or "title" in style_name:
-                body_html.append(f"<h1>{inner_content}</h1>")
-            elif "heading 2" in style_name or "subtitle" in style_name:
-                body_html.append(f"<h2>{inner_content}</h2>")
-            elif "heading 3" in style_name:
-                body_html.append(f"<h3>{inner_content}</h3>")
-            elif "heading 4" in style_name or "heading 5" in style_name:
-                body_html.append(f"<h4>{inner_content}</h4>")
-            elif "list bullet" in style_name:
-                body_html.append(f'<li class="bullet">{inner_content}</li>')
-            elif "list number" in style_name:
-                body_html.append(f'<li class="numbered">{inner_content}</li>')
-            else:
-                align_style = ""
-                if p.alignment == WD_ALIGN_PARAGRAPH.CENTER:
-                    align_style = ' style="text-align: center;"'
-                elif p.alignment == WD_ALIGN_PARAGRAPH.RIGHT:
-                    align_style = ' style="text-align: right;"'
-                body_html.append(f"<p{align_style}>{inner_content}</p>")
+                inner_content = "".join(formatted_runs) + "".join(img_htmls)
 
-        elif tag_name == "tbl":
-            t = docx.table.Table(element, doc)
-            table_rows = []
-            for row_idx, row in enumerate(t.rows):
-                cell_htmls = []
-                is_header = row_idx == 0
-                tag = "th" if is_header else "td"
-                for cell in row.cells:
-                    cell_text = html.escape(cell.text.strip())
-                    cell_htmls.append(f"<{tag}>{cell_text}</{tag}>")
-                table_rows.append(f"<tr>{''.join(cell_htmls)}</tr>")
-            body_html.append(f'<table>{"".join(table_rows)}</table>')
+                # Determine HTML tag based on DOCX style
+                if "heading 1" in style_name or "title" in style_name:
+                    body_html.append(f"<h1>{inner_content}</h1>")
+                elif "heading 2" in style_name or "subtitle" in style_name:
+                    body_html.append(f"<h2>{inner_content}</h2>")
+                elif "heading 3" in style_name:
+                    body_html.append(f"<h3>{inner_content}</h3>")
+                elif "heading 4" in style_name or "heading 5" in style_name:
+                    body_html.append(f"<h4>{inner_content}</h4>")
+                elif "list bullet" in style_name:
+                    body_html.append(f'<li class="bullet">{inner_content}</li>')
+                elif "list number" in style_name:
+                    body_html.append(f'<li class="numbered">{inner_content}</li>')
+                else:
+                    align_style = ""
+                    if p.alignment == WD_ALIGN_PARAGRAPH.CENTER:
+                        align_style = ' style="text-align: center;"'
+                    elif p.alignment == WD_ALIGN_PARAGRAPH.RIGHT:
+                        align_style = ' style="text-align: right;"'
+                    body_html.append(f"<p{align_style}>{inner_content}</p>")
+
+            elif tag_name == "tbl":
+                t = docx.table.Table(element, doc)
+                table_rows = []
+                for row_idx, row in enumerate(t.rows):
+                    cell_htmls = []
+                    is_header = row_idx == 0
+                    tag = "th" if is_header else "td"
+                    for cell in row.cells:
+                        cell_text = html.escape(cell.text.strip())
+                        cell_htmls.append(f"<{tag}>{cell_text}</{tag}>")
+                    table_rows.append(f"<tr>{''.join(cell_htmls)}</tr>")
+                body_html.append(f'<table>{"".join(table_rows)}</table>')
 
     full_html = f"""<!DOCTYPE html>
 <html>
